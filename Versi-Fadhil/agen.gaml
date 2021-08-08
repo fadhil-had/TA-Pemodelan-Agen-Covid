@@ -94,10 +94,10 @@ species Individual {
 		int end <- rnd(start+1,max(the_time));
 		
 		if (not lockdown) {
-			agenda_week[current_day_of_week][start] <- one_of(Building where possible_minors);
+			agenda_week[current_day_of_week][start] <- one_of(Building where (each.type in possible_minors));
 			agenda_week[current_day_of_week][end] <- home;
 		} else { // lockdown
-			agenda_week[current_day_of_week][start] <- one_of(Building where ("marketplace","store" in possible_minor));
+			agenda_week[current_day_of_week][start] <- one_of(Building where (each.type in ["marketplace","store"]));
 			agenda_week[current_day_of_week][end] <- home;
 		}
 	}

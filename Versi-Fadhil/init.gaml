@@ -76,12 +76,12 @@ global {
 		// Action untuk memasukkan tiap type building ke kategori masing-masing
 		buildings_per_activity <- Building group_by (each.type);
 		possible_livings <- ["house","hotel","apartments","yes","border_house"];
-		livings <- Building where ("apartments","hotel" in possible_livings);
-		homes <- Building where ("house","yes","border_house" in possible_livings);
+		livings <- Building where (each.type in ["apartments","hotel"]);
+		homes <- Building where (each.type in ["house","yes","border_house"]);
 		possible_schools <-  [[4,5]::"kindergarten", [6,11]::"elementary_school", [12,14]::"junior_high_school", [15,17]::"senior_high_school", [18,24]::"university"];
 		possible_markets <- ["marketplace","mall","store"];
 		possible_minors <- ["cafe","temple","public","mosque","church","marketplace","mall","store","bank","store","post_office","commercial"];
-		possible_worktype <- ["pns"::0.0232, "police"::0.0081, "swasta"::0.7715, "bumn"::0.034, "nakes"::0.0058, "wiraswasta"::0.1561, "guru"::0.0165, "industrial"::0.0154];
+		possible_worktype <- ["pns"::0.0232, "police"::0.0081, "swasta_free"::0.1227, "swasta_office"::0.6488, "bumn"::0.034, "nakes"::0.0058, "wiraswasta"::0.1561, "guru"::0.0165, "industrial"::0.0154];
 		possible_pns <- ["village_office"::0.25, "subdistrict_office"::0.05, "government_office"::0.7];
 		possible_bumn <- ["post_office"::0.1, "bank"::0.6, "community_group_office"::0.3];
 		possible_wiraswasta <- ["store"::0.4, "marketplace"::0.6];

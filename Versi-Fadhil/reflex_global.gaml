@@ -207,7 +207,7 @@ global {
 		come_weekly <- come_weekly + count_today[d]; //Tambahin ke come weekly
 		average_come <- come_weekly div 7; //Rata2in deh
 		
-		if (travel_today div num_population > 0.1 and average_come > 300){
+		if ((travel_today/num_population > 0.1) and (average_come > 300)){
 			param_mobility <- param_mobility + 1;
 		} else {
 			param_mobility <- 0;
@@ -216,14 +216,15 @@ global {
 	
 	reflex total_lockdown when: num_confirmed >= lockdown_threshold and not lockdown and (param_mobility > mobility_lockdown) { //https://www.pikiran-rakyat.com/nasional/pr-01352541/pakar-ui-sebut-ada-3-kriteria-yang-perlu-dilihat-menuju-indonesia-lockdown-dalam-mencegah-corona
 		//Syarat lockdown 3, jumlah kasus meningkat pesat, mobilitas tinggi dan dana siap
+		time_of_day <- [];
 		loop occupation over: individuals_per_profession.keys {
 			if (occupation = "nakes") {
 				// Menyuruh Individual yang bekerja di nakes
 				// Untuk kerja fullday dan karantina di RS
-				ask individuals_per_profession[occupation] {					
+				ask individuals_per_profession[occupation] {
 					loop agenda_day over:agenda_week {
 						int start_hour <- 0;
-						int end_hour <- 23;						
+						int end_hour <- 23;
 						agenda_day[start_hour] <- major_agenda_place; //Setiap hari 24 jam nakes dirumah sakit
 						agenda_day[end_hour] <- major_agenda_place;
 					}
@@ -240,13 +241,17 @@ global {
 		}
 		lockdown <- true;
 		new_normal <- false;
-		activity_reduction_factor <- 0.75;
+		activity_reduction_factor <- 1.0;
 		mask_usage_proportion <- 0.9;
-		infection_reduction_factor <- 0.25;
 	}
 	
 	reflex psbb when: num_confirmed >= psbb_threshold and num_confirmed < lockdown_threshold and not lockdown and not psbb { //https://www.pikiran-rakyat.com/nasional/pr-01352541/pakar-ui-sebut-ada-3-kriteria-yang-perlu-dilihat-menuju-indonesia-lockdown-dalam-mencegah-corona
-		//Kalau sedang lockdown, gabisa langsung PSBB, tp harus ke new normal dulu
+		/* 
+		 * Kalau sedang lockdown, gabisa langsung PSBB, tp harus ke new normal dulu
+		 * Jam malam diberlakukan sehingga diatas jam 8 gaboleh keluar sama sekali
+		 */
+		
+		night <- [19,20];
 		loop occupation over: individuals_per_profession.keys {
 			if (occupation = "nakes") {
 				// Menyuruh Individual yang bekerja di nakes
@@ -272,18 +277,18 @@ global {
 		lockdown <- true;
 		new_normal <- false;
 		activity_reduction_factor <- activity_reduction_psbb;
-		mask_usage_proportion <- 0.9;
+		mask_usage_proportion <- 0.75;
 	}
 	
 	reflex new_normal when: pos_decrease_counter = new_normal_threshold and (lockdown or psbb) and not new_normal {
 		
 		/*
-		 * Melakukan pengangkatan lockdown ketika counter penurunan
-		 * jumlah positif mencapai threshold.
-		 * Tiap Individual yang bekerja tidak di rumah sakit dapat 
-		 * bekerja kembali seperti biasa.
+		 * PSBB sama lockdown diangkat jika point mencapai threshold
+		 * Nakes kembali kerja normal, pekerja kantoran selain wiraswasta dan pekerja lepas 3 hari wfh
+		 * Sisanya kerja normal
 		 */
 		
+		night <- [19,20,21,22];
 		loop occupation over: individuals_per_profession.keys {
 			if (occupation = "nakes") {
 				ask individuals_per_profession[occupation] {
@@ -294,8 +299,8 @@ global {
 						agenda_day[end_hour] <- home;
 					}
 				}
-			} else if (occupation != ["none","wiraswasta","industrial"]){
-				ask individuals_per_profession[occupation] {					
+			} else if (occupation != ["none","wiraswasta","industrial","swasta_free"]){
+				ask individuals_per_profession[occupation] {
 					int wfh_day_1 <- one_of (major_agenda_hours.keys);
 					int wfh_day_2 <- one_of (major_agenda_hours.keys - wfh_day_1);
 					int wfh_day_3 <- one_of (major_agenda_hours.keys - wfh_day_1 - wfh_day_2);
@@ -309,8 +314,8 @@ global {
 			} else {
 				ask individuals_per_profession[occupation] {
 					loop agenda_day over: agenda_week {
-						int end_hour <- max(agenda_day.keys);
-						agenda_day[end_hour] <- home;
+						int start_hour <- min(agenda_day.keys);
+						agenda_day[start_hour] <- major_agenda_place;
 					}
 				}
 			}
@@ -329,7 +334,7 @@ global {
 		mask_usage_proportion <- 0.5;
 	}
 	
-	reflex full_normal when: pos_decrease_counter = normal_threshold and (lockdown or psbb or new_normal) {
+	reflex full_normal when: confirmed_today = 0 and (lockdown or psbb or new_normal) {
 		
 		/*
 		 * Melakukan pengangkatan lockdown ketika counter penurunan
@@ -338,15 +343,9 @@ global {
 		 * bekerja kembali seperti biasa.
 		 */
 		
+		night <- [19,20,21,22];
 		loop occupation over: individuals_per_profession.keys {
-			if (occupation = "nakes") {
-				ask individuals_per_profession[occupation] {
-					loop agenda_day over: agenda_week {
-						int end_hour <- max(agenda_day.keys);
-						agenda_day[end_hour] <- home;
-					}
-				}
-			} else if (occupation != none){
+			if (occupation != none){
 				ask individuals_per_profession[occupation] {
 					loop agenda_day over: agenda_week {
 						int start_hour <- min(agenda_day.keys);
