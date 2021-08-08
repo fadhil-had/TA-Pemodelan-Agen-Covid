@@ -25,10 +25,10 @@ global {
 	int previous_day <- 0;	
 	
 	//Initial Shapefile from GIS
-	file shp_boundary <- file("../includes/RW_Gubeng.shp"); //Data from GIS
-	file shp_buildings <- file("../includes/gubengo.shp"); //Data from GIS
+	file shp_boundary <- file("../includes/Peta/Peta_Surabaya.shp"); //Data from GIS
+	file shp_buildings <- file("../includes/Bangunan/Surabaya.shp"); //Data from GIS
 	geometry shape <- envelope(shp_buildings); //Data from GIS
-	file shp_roads <- file("../includes/jalan.shp"); //Data from GIS
+	file shp_roads <- file("../includes/Jalan/Jalan_Surabaya.shp"); //Data from GIS
 	
 	list<Individual> population;
 	// Kumpulan orang yang dianggap populasi kota.
@@ -36,7 +36,7 @@ global {
 	// map memetakan jenis bangunan ke semua bangunan yang sesuai.
 	map<string, list<Individual>> individuals_per_profession;
 	// map untuk mengelompokkan Individual dengan profesinya, ada maupun tidak.
-	map<string> possible_livings;
+	list<string> possible_livings;
 	// list akan diisi jenis bangunan apa saja yang dianggap sebagai rumah.
 	list<Building> livings;
 	// list akan diisi semua entitas Bangunan yang digolongkan tempat tinggal selain rumah.
@@ -45,12 +45,12 @@ global {
 	// map akan memetakan rentang usia dengan jenis pendidikan yang sesuai.
 	map<string, float> possible_worktype;
 	// map untuk memetakan jenis pekerjaan dengan peluangnya.
-	map<string> possible_markets;
+	list<string> possible_markets;
 	// list akan diisi dengan semua jenis bangunan yang dapat digunakan untuk belanja.
 	// untuk major agenda ibu rumah tangga
-	map<string> possible_minors;
+	list<string> possible_minors;
 	// list akan diisi dengan semua jenis bangunan yang menjadi tempat minor agenda.
-	map<string> possible_healthfacs;
+	list<string> possible_healthfacs;
 	// list akan diisi dengan semua jenis bangunan yang menjadi fasilitas kesehatan.
 	string station;
 	// list akan diisi dengan semua jenis bangunan yang menjadi stasiun.
@@ -60,7 +60,7 @@ global {
 	map<string, float> possible_swasta;
 	map<string, float> possible_bumn;
 	map<string, float> possible_wiraswasta;
-	map<string> possible_nakes;
+	list<string> possible_nakes;
 	
 	//Action for Initial from GIS
 	action init_building {
@@ -87,8 +87,8 @@ global {
 		possible_wiraswasta <- ["store"::0.4, "marketplace"::0.6];
 		possible_swasta <- ["embassy"::0.001, "commercial"::0.14, "office"::0.7, "mall"::0.119, "cafe"::0.04];
 		possible_nakes <- ["clinic", "hospital"];
-		station <- ["train_station"];
-		cemetery <- ["cemetery"];
+		station <- "train_station";
+		cemetery <- "cemetery";
 	}
 	
 	action population_generation {
@@ -101,7 +101,7 @@ global {
 	 * dan bangunan rekreasi.
 	 */
 	 
-	 	int num_family_homes <- num_family*0.9; //Gaada dasar nih cara bagi orangnyaa dirumah atau dihotel
+	 	int num_family_homes <- (num_family*9) div 10; //Gaada dasar nih cara bagi orangnyaa dirumah atau dihotel
 		ask num_family_homes among homes {
 			
 			if (flip(proba_active_family)) {
@@ -111,7 +111,7 @@ global {
 					sex <- 1;
 					home <- myself;
 					myself.residents << self;
-					if (homes = "border_house"){
+					if (homes = buildings_per_activity["border_house"]){
 						stat_traveler <- commuter;
 					}
 					else {
@@ -124,7 +124,7 @@ global {
 					sex <- 0;
 					home <- myself;
 					myself.residents << self;
-					if (homes = "border_house"){
+					if (homes = buildings_per_activity["border_house"]){
 						stat_traveler <- commuter;
 					}
 					else {
@@ -139,7 +139,7 @@ global {
 						sex <- rnd(0,1);
 						home <- myself;
 						myself.residents << self;
-						if (homes = "border_house"){
+						if (homes = buildings_per_activity["border_house"]){
 							stat_traveler <- commuter;
 						}
 						else {
@@ -154,7 +154,7 @@ global {
 						sex <- 1;
 						home <- myself;
 						myself.residents << self;
-						if (homes = "border_house"){
+						if (homes = buildings_per_activity["border_house"]){
 							stat_traveler <- commuter;
 						}
 						else {
@@ -169,7 +169,7 @@ global {
 						sex <- 0;
 						home <- myself;
 						myself.residents << self;
-						if (homes = "border_house"){
+						if (homes = buildings_per_activity["border_house"]){
 							stat_traveler <- commuter;
 						}
 						else {
@@ -184,7 +184,7 @@ global {
 						sex <- rnd(0,1);
 						home <- myself;
 						myself.residents << self;
-						if (homes = "border_house"){
+						if (homes = buildings_per_activity["border_house"]){
 							stat_traveler <- commuter;
 						}
 						else {
@@ -201,7 +201,7 @@ global {
 					sex <- rnd(0,1);
 					home <- myself;
 					myself.residents << self;
-					if (homes = "border_house"){
+					if (homes = buildings_per_activity["border_house"]){
 						stat_traveler <- commuter;
 					}
 					else {
@@ -213,7 +213,7 @@ global {
 		
 		ask livings {
 			
-			int num_apart_family <- num_family*0.1/12;
+			int num_apart_family <- (num_family div 10) div 12;
 			loop times: num_apart_family {
 				if (flip(proba_active_family)) {
 					// Keluarga aktif didefinisikan sebagai keluarga yang setidaknya ada ayah dan ibu.
@@ -388,7 +388,7 @@ global {
 		 			}
 				}
 				else if (major_agenda_type = "swasta_office"){
-					string swasta1_place <- rnd_choice(possible_swasta where ("embassy","commercial","office"));
+					string swasta1_place <- one_of("embassy","commercial","office");
 					working_places <- buildings_per_activity[swasta1_place];
 					loop swasta1_place over: salary_by_places.keys{
 		 				if (swasta1_place = "embassy"){
@@ -399,7 +399,7 @@ global {
 		 			}
 				}
 				else if (major_agenda_type = "swasta_free"){
-					string swasta2_place <- rnd_choice(possible_swasta where ("mall","cafe"));
+					string swasta2_place <- one_of("mall","cafe");
 					working_places <- buildings_per_activity[swasta2_place];
 					loop swasta2_place over: salary_by_places.keys{
 		 				salary <- get_proba(salary_by_places[swasta2_place],"random");
@@ -427,7 +427,7 @@ global {
 			}
 			else {
 				major_agenda_type <- none;
-				major_agenda_place <- "home";
+				major_agenda_place <- home;
 			}		
 		}
 		individuals_per_profession <- (Individual group_by (each.major_agenda_type));

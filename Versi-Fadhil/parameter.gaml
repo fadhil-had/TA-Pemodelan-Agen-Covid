@@ -16,8 +16,7 @@ global{
 	//General Parameter of Simulation
 	int num_population <- 0; //Initial population
 	int num_family; //Initial family, input from user
-	int num_init_confirmed; //Initial confirmed status, input from user
-	int num_init_travelers; //Initial travelers status, input from user
+	int num_init_infected; //Initial confirmed status, input from user
 	list<string> status_traveler <- [ //Status perjalanan agen manusia
 		"none", "commuter", "leave", "come"
 	];
@@ -30,17 +29,17 @@ global{
 	float specificity_rapid <- 1.0; //Search data from journal
 	float quarantine_obedience; //Initial obedience from data in journal
 	float mask_obedience; //Initial obedience from data in journal
-	float test_rate <- 0.025;
 	float mask_effectiveness <- 0.77;
-	int lockdown_threshold; //Jumlah infeksi lockdown dilaksanakanan, inisiasi awal
+	int lockdown_threshold; //Jumlah infeksi lockdown dilaksanakanan, input user
 	bool lockdown <- false; //Status lockdown
 	bool new_normal <- false; //Status lepas lockdown
-	bool full_normal <- false;
-	int new_normal_threshold; //Jumlah infeksi turun jika lockdown dilepas
-	int normal_threshold;
-	int mobility_lockdown;
-	int simulation_days; //Jumlah hari simulasi
-	int building_capacity_factor <- 1;
+	bool psbb <- false;
+	int new_normal_threshold; //Jumlah infeksi turun jika lockdown dilepas, input user
+	int normal_threshold; //Input user
+	int psbb_threshold; //Input user
+	int mobility_lockdown <- 5; //Input user, hari terjadi mobilisasi sesuai standar
+	int simulation_days; //Jumlah hari simulasi, input user
+	float activity_reduction_psbb; //input user, pengurangan aktivitas saat PSBB
 	
 	//Demographical Parameters
 	int min_age <- 1;
@@ -67,7 +66,7 @@ global{
 	list<int> evening <- [15,16,17,18];
 	list<int> night <- [19,20,21,22];
 	list<int> midnight <- [23,0,1,2,3,4,5,6];
-	list<list<int>> time_of_day <- [morning, daytime, evening, night, midnight];
+	list<list<int>> time_of_day <- [morning, daytime, evening, night];
 	
 	//EPIDEMIOLOGICAL PARAMETERS
 	list<string> status_covid <- [ //Status agen manusia
@@ -94,26 +93,26 @@ global{
 		[60,69]::[0.88,0.074],
 		[70,90]::[0.74,0.089]
 	];
-	map<list<int>,float> incubation_distribution <- [ 
+	map<list<int>,int> incubation_distribution <- [ 
 	//Distribusi periode inkubasi berdasarkan umur, rata2 4-5 hari bisa dicari lagi
-		[0,14]::[12],
-		[15,29]::[9],
-		[30,44]::[8],
-		[45,59]::[7],
-		[60,74]::[10],
-		[75,89]::[13],
-		[89,max_age]::[14]
+		[0,14]::3,
+		[15,29]::5,
+		[30,44]::4,
+		[45,59]::3,
+		[60,74]::2,
+		[75,89]::2,
+		[89,max_age]::2
 	];
 	map<list<int>,float> asymptomic_distribution <- [
 	//Kemungkinan asimptomp berdasarkan umur
 		 
-		[0,19]::[0.701],
-		[20,29]::[0.626],
-		[30,39]::[0.596],
-		[40,49]::[0.573],
-		[50,59]::[0.599],
-		[60,69]::[0.616],
-		[70,max_age]::[0.687]
+		[0,19]::0.701,
+		[20,29]::0.626,
+		[30,39]::0.596,
+		[40,49]::0.573,
+		[50,59]::0.599,
+		[60,69]::0.616,
+		[70,max_age]::0.687
 	];
 	map<list<int>,float> moderate_distribution <- [
 	//Kemungkinan dirawat, untuk menentukan mild or moderate
@@ -138,7 +137,7 @@ global{
 	map<list<int>,float> ICU_distribution <- [
 	//Kemungkinan masuk ICU, untuk menentukan moderate or severe
 		[0,9]::0.008,
-		[10,19]::0,
+		[10,19]::0.01,
 		[20,29]::0.006,
 		[30,49]::0.011,
 		[50,69]::0.037,
@@ -201,13 +200,13 @@ global{
 	float proportion_quarantined_transmission <- 0.1; //Ga sesuai sumber???
 	
 	//Economical Parameter
-	map<string, list<int>> salary_by_places <- [
+	map<string, list<float>> salary_by_places <- [
 		/*
 		 * Tipe data berbentuk map, yang memetakan rentang usia
 		 * dengan parameter distribusi probabilitas.
 		 */
 		 
-		["kindergarten"]::[12,1],
+		["kindergarten"]::[12.0,1.0],
 		["elementary_school"]::[19.35,1.81],
 		["junior_high_school"]::[19.25,0.89],
 		["senior_high_school"]::[19.25,0.64],
@@ -215,7 +214,7 @@ global{
 		["marketplace"]::[22.45,0.84],
 		["mall"]::[22.95,0.89],
 		["store"]::[24.4,0.97],
-		["village_office"]::[],
+		["village_office"]::[1.1,1.1],
 		["subdistrict_office"]::[19.35,1.81],
 		["government_office"]::[19.25,0.89],
 		["post_office"]::[19.25,0.64],
@@ -225,34 +224,34 @@ global{
 		["cafe"]::[24.4,0.97],
 		["clinic"]::[19.25,0.64],
 		["hospital"]::[21.7,0.87],
-		["police"]::[]
+		["police"]::[11.1,11.1]
 	];
 	
-	map<string, list<int>> capacity_by_places <- [
+	map<string, int> capacity_by_places <- [
 		/*
 		 * Tipe data berbentuk map, yang memetakan rentang usia
 		 * dengan parameter distribusi probabilitas.
 		 */
 		 
-		["kindergarten"]::[],
-		["elementary_school"]::[19.35,1.81],
-		["junior_high_school"]::[19.25,0.89],
-		["senior_high_school"]::[19.25,0.64],
-		["university"]::[21.7,0.87],
-		["marketplace"]::[22.45,0.84],
-		["mall"]::[22.95,0.89],
-		["store"]::[24.4,0.97],
-		["village_office"]::[],
-		["subdistrict_office"]::[19.35,1.81],
-		["government_office"]::[19.25,0.89],
-		["post_office"]::[19.25,0.64],
-		["bank"]::[21.7,0.87],
-		["community_group_office","office","commercial"]::[22.45,0.84],
-		["embassy"]::[22.95,0.89],
-		["cafe"]::[24.4,0.97],
-		["clinic"]::[19.25,0.64],
-		["hospital"]::[21.7,0.87],
-		["police"]::[]
+		["kindergarten"]::100,
+		["elementary_school"]::100,
+		["junior_high_school"]::100,
+		["senior_high_school"]::100,
+		["university"]::100,
+		["marketplace"]::100,
+		["mall"]::100,
+		["store"]::100,
+		["village_office"]::100,
+		["subdistrict_office"]::100,
+		["government_office"]::100,
+		["post_office"]::100,
+		["bank"]::100,
+		["community_group_office","office","commercial"]::100,
+		["embassy"]::100,
+		["cafe"]::100,
+		["clinic"]::100,
+		["hospital"]::100,
+		["police"]::100
 	];
 	
 	//STRING CONSTANTS
@@ -269,6 +268,7 @@ global{
 	string asymptomic <- "asymptomic";
 	string hospital <- "hospital";
 	string ICU <- "ICU";
+	string house <- "house";
 	string mild <- "mild";
 	string moderate <- "moderate";
 	string severe <- "severe";
