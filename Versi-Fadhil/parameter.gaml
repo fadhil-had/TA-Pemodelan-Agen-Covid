@@ -20,26 +20,30 @@ global{
 	list<string> status_traveler <- [ //Status perjalanan agen manusia
 		"none", "commuter", "leave", "come"
 	];
+	int simulation_days; //Jumlah hari simulasi, input user
 	
-	//float test_accuracy;
+	float test_accuracy;
 	float contact_tracing_effectiveness; //Input from user
-	float sensitivity_pcr <- 0.91; //Data from journal
-	float specificity_pcr <- 0.95; //Data from journal
-	float sensitivity_rapid <- 1.0; //Search data from journal
-	float specificity_rapid <- 1.0; //Search data from journal
-	float quarantine_obedience; //Initial obedience from data in journal
-	float mask_obedience; //Initial obedience from data in journal
+	float sensitivity_pcr <- 0.943; //Data from journal
+	float specificity_pcr <- 0.959; //Data from journal
+	float sensitivity_rapid <- 0.775; //Search data from journal
+	float specificity_rapid <- 0.87; //Search data from journal
+	float quarantine_obedience <- 0.73; //Initial obedience from data in journal
+	float mask_obedience <- 0.81; //Initial obedience from data in journal
 	float mask_effectiveness <- 0.77;
 	int lockdown_threshold; //Jumlah infeksi lockdown dilaksanakanan, input user
 	bool lockdown <- false; //Status lockdown
-	bool new_normal <- false; //Status lepas lockdown
-	bool psbb <- false;
-	int new_normal_threshold; //Jumlah infeksi turun jika lockdown dilepas, input user
-	int normal_threshold; //Input user
-	int psbb_threshold; //Input user
+	float activity_reduction_lockdown;
 	int mobility_lockdown <- 5; //Input user, hari terjadi mobilisasi sesuai standar
-	int simulation_days; //Jumlah hari simulasi, input user
-	float activity_reduction_psbb; //input user, pengurangan aktivitas saat PSBB
+	bool psbb <- false;
+	int psbb_threshold; //Input user
+	float activity_reduction_psbb;
+	int new_normal_threshold; //Jumlah infeksi turun jika lockdown dilepas, input user
+	bool new_normal <- false; //Status lepas lockdown
+	float activity_reduction_newnormal;
+	int normal_threshold; //Input user
+	float proba_travel <- 0.0001; //Kemungkinan orang melakukan perjalanan
+	float proba_travel_infected <- 0.25;
 	
 	//Demographical Parameters
 	int min_age <- 1;
@@ -91,7 +95,7 @@ global{
 		[40,49]::[0.8,0.089],
 		[50,59]::[0.82,0.089],
 		[60,69]::[0.88,0.074],
-		[70,90]::[0.74,0.089]
+		[70,max_age]::[0.74,0.089]
 	];
 	map<list<int>,int> incubation_distribution <- [ 
 	//Distribusi periode inkubasi berdasarkan umur, rata2 4-5 hari bisa dicari lagi
@@ -163,7 +167,22 @@ global{
 		[70,79]::0.08,
 		[80,max_age]::0.15
 	];
-	list<float> days_diagnose <- [3.57,0.65]; //Hari menuju terdiagnosa
+	//list<float> days_diagnose <- [3.57,0.65]; //Hari menuju terdiagnosa
+	map<list<int>, list<float>> days_diagnose <- [
+		/*
+		 * Tipe data berbentuk map, yang memetakan rentang usia
+		 * dengan parameter distribusi probabilitas.
+		 */
+		 
+		[1,9]::[3.0,1.2],
+		[10,19]::[5.0,1.81],
+		[20,29]::[5.0,0.89],
+		[30,39]::[4.0,0.64],
+		[40,49]::[3.0,0.87],
+		[50,59]::[2.0,0.84],
+		[60,69]::[2.0,0.89],
+		[70,max_age]::[2.0,0.97]
+	];
 	map<list<int>, list<float>> days_symptom_until_recovered <- [
 		/*
 		 * Tipe data berbentuk map, yang memetakan rentang usia
@@ -177,13 +196,13 @@ global{
 		[40,49]::[21.7,0.87],
 		[50,59]::[22.45,0.84],
 		[60,69]::[22.95,0.89],
-		[70,90]::[24.4,0.97]
+		[70,max_age]::[24.4,0.97]
 	];
 	
 	
 	//BEHAVIORAL PARAMETERS
 	float proba_voluntary_random_test <- 0.05; //Kemungkinan test secara volunteer
-	float proba_test <- 1.0; //Kemungkinan test
+	float proba_test <- 0.95; //Kemungkinan test
 	float proba_activity_morning <-0.15;
 	float proba_activity_daytime <-0.25;
 	float proba_activity_evening <-0.325;
@@ -194,10 +213,12 @@ global{
 		proba_activity_evening,
 		proba_activity_night
 	];
-	float activity_reduction_factor <- 0.5;
-	float mask_usage_proportion <- 0.85; //Ga sesuai sumber atau sumbernya dari paper di grup
+	float activity_reduction_factor <- 0.0;
+	float mask_usage_proportion <- 0.75; //Ga sesuai sumber atau sumbernya dari paper di grup
 	float infection_reduction_factor <- 0.0; //https://ejournal.upi.edu/index.php/image/article/download/24189/pdf
 	float proportion_quarantined_transmission <- 0.1; //Ga sesuai sumber???
+	float proba_death <- 0.002; //Kemungkinan mati
+	float obedience; //(Penting) Dipisah sebaiknya satu persatu. Ini bukannya udah ada di parameter.gaml?
 	
 	//Economical Parameter
 	map<string, list<float>> salary_by_places <- [
@@ -206,25 +227,29 @@ global{
 		 * dengan parameter distribusi probabilitas.
 		 */
 		 
-		["kindergarten"]::[12.0,1.0],
-		["elementary_school"]::[19.35,1.81],
-		["junior_high_school"]::[19.25,0.89],
-		["senior_high_school"]::[19.25,0.64],
-		["university"]::[21.7,0.87],
-		["marketplace"]::[22.45,0.84],
-		["mall"]::[22.95,0.89],
-		["store"]::[24.4,0.97],
-		["village_office"]::[1.1,1.1],
-		["subdistrict_office"]::[19.35,1.81],
-		["government_office"]::[19.25,0.89],
-		["post_office"]::[19.25,0.64],
-		["bank"]::[21.7,0.87],
-		["community_group_office","office","commercial"]::[22.45,0.84],
-		["embassy"]::[22.95,0.89],
-		["cafe"]::[24.4,0.97],
-		["clinic"]::[19.25,0.64],
-		["hospital"]::[21.7,0.87],
-		["police"]::[11.1,11.1]
+		"kindergarten"::[650.0,900.0],
+		"elementary_school"::[650.0,1175.0],
+		"junior_high_school"::[650.0,1175.0],
+		"senior_high_school"::[650.0,1175.0],
+		"university"::[650.0,1275.0],
+		"marketplace"::[125.0,2500.0],
+		"mall"::[500.0,2000.0],
+		"store"::[250.0,25250.0],
+		"supermarket"::[250.0,500.0],
+		"village_office"::[475.0,762.5],
+		"subdistrict_office"::[675,962.5],
+		"government_office"::[850,1187.5],
+		"post_office"::[375.0,750.0],
+		"bank"::[687.5,1500.0],
+		"community_group_office"::[475.0,762.5],
+		"office"::[1000.0,12500.00],
+		"commercial"::[1000.0,12500.00],
+		"embassy"::[1150.0,2734.0],
+		"cafe"::[500.00,2250.0],
+		"clinic"::[187.5,916.5],
+		"hospital"::[375.0,2625.0],
+		"police"::[492.0,732.0],
+		"industrial"::[1000.0,5000.00]
 	];
 	
 	map<string, int> capacity_by_places <- [
@@ -233,25 +258,36 @@ global{
 		 * dengan parameter distribusi probabilitas.
 		 */
 		 
-		["kindergarten"]::100,
-		["elementary_school"]::100,
-		["junior_high_school"]::100,
-		["senior_high_school"]::100,
-		["university"]::100,
-		["marketplace"]::100,
-		["mall"]::100,
-		["store"]::100,
-		["village_office"]::100,
-		["subdistrict_office"]::100,
-		["government_office"]::100,
-		["post_office"]::100,
-		["bank"]::100,
-		["community_group_office","office","commercial"]::100,
-		["embassy"]::100,
-		["cafe"]::100,
-		["clinic"]::100,
-		["hospital"]::100,
-		["police"]::100
+		"kindergarten"::50,
+		"elementary_school"::300,
+		"junior_high_school"::200,
+		"senior_high_school"::200,
+		"university"::1000,
+		"marketplace"::100,
+		"mall"::1000,
+		"store"::50,
+		"supermarket"::50,
+		"village_office"::30,
+		"subdistrict_office"::30,
+		"government_office"::30,
+		"post_office"::50,
+		"bank"::50,
+		"community_group_office"::30,
+		"office"::100,
+		"commercial"::100,
+		"embassy"::50,
+		"cafe"::20,
+		"clinic"::1000,
+		"hospital"::1000,
+		"police"::30,
+		"public"::1000,
+		"pumping_station"::50,
+		"industrial"::1000,
+		"mosque"::50,
+		"church"::50,
+		"temple"::50,
+		"cemetery"::100000,
+		"train_station"::100000
 	];
 	
 	//STRING CONSTANTS
@@ -277,4 +313,8 @@ global{
 	string leave <- "leave";
 	string commuter <- "commuter";
 	string come <- "come";
+	string infected <- "infected";
+	string exposed <- "exposed";
+	string rapid <- "rapid";
+	string pcr <- "pcr";
 }

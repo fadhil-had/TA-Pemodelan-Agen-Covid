@@ -20,16 +20,11 @@ species Individual {
 	//------------------------//
 	
 	// Atribut umum
-	bool live <- true; //Status kehidupan agen
+	bool live; //Status kehidupan agen
 	int age; //Umur
 	int sex; //Jenis kelamin, 0 male 1 female
-	float proba_travel <- 0.01; //Kemungkinan orang melakukan perjalanan
-	string stat_traveler <- none; //Status pelaku perjalanan, dibagi 4 yaitu none, commuter, leave and come
-	int traveler_days;
-	string job; //Jenis pekerjaan
 	Building current_place; //Tempat saat ini
 	Building home; //Rumah agen
-	int max_travel_days <- rnd(7,21);
 	
 	// Atribut Agenda
 	bool is_employed;
@@ -39,33 +34,28 @@ species Individual {
 	map<int,list<int>> major_agenda_hours;
 	
 	// Atribut Klinis
-	int comorbid; //Jenis komorbid
-	string stat_covid; //Status Covid
-	string severity; //Keparahan Covid, muncul setelah fix Covid
-	bool covid_stat; //Untuk melihat secara pasti seseorang Covid atau bukan
-	bool quarantine_status <- false;
+	string stat_covid <- normal; //Status Covid
+	string covid_stat <- none; //Untuk melihat secara pasti seseorang Covid atau bukan
+	string symptomps <- none; //Gejala awal sebelum pasti Covid
+	string severity <- none; //Keparahan Covid, muncul setelah fix Covid
+	float death_proba <- proba_death;
 	string quarantine_place <- none;
-	int infection_period;
-	int incubation_period; //Masa inkubasi menuju timbul gejala
+	int infection_period <- 0; //Masa inkubasi seseorang
+	int incubation_period <- 0; //Masa inkubasi menuju timbul gejala
 	int quarantine_period <- 0; //Masa karantina
-	int illness_period;
-	int death_recovered_period;
-	float death_proba <- 0.5; //Kemungkinan mati
-	string symptomps; //Gejala awal sebelum pasti Covid
+	int illness_period <- 0; //Masa sakit
+	int death_recovered_period <- 0; //Masa menuju sehat
 	bool must_rapid_test <- false; //Status wajib test jika kena contact trace
  	bool must_PCR_test <- false; //Status wajib test jika kena contact trace
- 	int PCR_negative_count; //Hitungan berapa jumlah sudah test PCR
- 	bool have_PCR; //Status apakah sudah PCR
- 	int PCR_waiting_day; //Hari menunggu hasil PCR
-	int rapid_result <- 0; //1 positif, 2 negatif
-	int pcr_result <- 0;
-	float obedience; //(Penting) Dipisah sebaiknya satu persatu. Ini bukannya udah ada di parameter.gaml?
-	int type_of_death; // 0 normal, 1 confirmed, 2 probable
 	list<Individual> meet_today; //Untuk melihat yang ditemui di hari ini
-	list<Individual> meet_yesterday; //Untuk melihat yang ditemui di kemaren 
+	list<Individual> meet_yesterday; //Untuk melihat yang ditemui di kemaren
 	
- 	// Atribut Ekonomis
+ 	// Atribut Sosial Ekonomis
+	string stat_traveler <- none; //Status pelaku perjalanan, dibagi 4 yaitu none, commuter, leave and come
+	int traveler_days <- 0;
+	int max_travel_days <- rnd(3,10);
  	float salary;
+ 	float covid_salary;
  	float property; //Total kekayaan.
  	bool poor;
 	
@@ -93,11 +83,11 @@ species Individual {
 		int start <- rnd((min(the_time)),(max(the_time)-1));
 		int end <- rnd(start+1,max(the_time));
 		
-		if (not lockdown) {
+		if (not lockdown or not psbb) {
 			agenda_week[current_day_of_week][start] <- one_of(Building where (each.type in possible_minors));
 			agenda_week[current_day_of_week][end] <- home;
 		} else { // lockdown
-			agenda_week[current_day_of_week][start] <- one_of(Building where (each.type in ["marketplace","store"]));
+			agenda_week[current_day_of_week][start] <- one_of(Building where (each.type in ["marketplace","store","supermarket"]));
 			agenda_week[current_day_of_week][end] <- home;
 		}
 	}
@@ -105,38 +95,7 @@ species Individual {
 	
 	// Action Individual Klinis
 	
-	// 1. Action PCR Test (Real)
-	action real_PCR {
-		Building h <- one_of(buildings_per_activity["hospital", "clinic"]);
-		do enter_building(h);
-		if (covid_stat) {
-			bool test_result <- flip(sensitivity_pcr);
-			if (test_result) {//real positive
-				stat_covid <- confirmed;
-				PCR_negative_count <- 0;
-				pcr_result <- 1;
-			}
-			else { //si yang sebenarnya positif tp hasil tesnya negatif
-				PCR_negative_count <- PCR_negative_count + 1;
-				pcr_result <- 2;
-			}
-		}
-		else {
-			bool test_result <- flip(specificity_pcr);
-			if (test_result) { // real negative
-				PCR_negative_count <- PCR_negative_count + 1;
-				pcr_result <- 2;
-			}
-			else { //si yang sebenarnya negatif tp hasil tesnya positif
-				stat_covid <- confirmed;
-				PCR_negative_count <- 0;
-				pcr_result <- 1;
-				
-			}
-		}
-	}
-	
-	// 2. Contact Trace (Belum kelar)
+	// 1. Contact Trace (Belum kelar)
 	action contact_trace {
 		
 		list<Individual> contacts <- self.home.residents - self; //Contact trace untuk penghuni rumah
@@ -152,15 +111,19 @@ species Individual {
 		//Mengubah status menjadi harus karantina, dan membuat mereka harus test
 		if (contacts != []) {
 			ask contacts {
-				if (quarantine_status = false) {
-					quarantine_status <- flip(obedience*quarantine_obedience);
+				if (quarantine_place = none) {
+					if (flip(obedience*quarantine_obedience)){
+						quarantine_place <- house;
+					} else {
+						quarantine_place <- none;
+					}
 				}
 				must_rapid_test <- true;
 			}
 		}
 	}
 	
-	// 3. Initialisasi parameter infeksi
+	// 2. Initialisasi parameter infeksi
 	action init_infection {
 		
 		//Cek apakah dia asimptomp atau tidak
@@ -187,16 +150,13 @@ species Individual {
 			symptomps <- asymptomic;
 		}
 		
-		// Menentukan kapan hari gejala timbul
-		l <- match_age(incubation_distribution.keys);
-		incubation_period <- int(24*incubation_distribution[l]);
-		
 		// Menentukan penyakit tersebut berubah menjadi severity
-		illness_period <- int(24*get_proba(days_diagnose, "normal")) + incubation_period;
+		l <- match_age(days_diagnose.keys);
+		illness_period <- int(24*get_proba(days_diagnose[l],"gauss")) + incubation_period;
 		
 		// Menentukan kapan hari sembuh
 		l <- match_age(days_symptom_until_recovered.keys);
-		death_recovered_period <- int(24*get_proba(days_symptom_until_recovered[l], "normal")) + illness_period;
+		death_recovered_period <- int(24*get_proba(days_symptom_until_recovered[l],"gauss")) + illness_period;
 		
 	}
 	
@@ -204,9 +164,9 @@ species Individual {
 	// Reflex Individual Umum
 	
 	// 1. Reflex Bepergian atau Menjadi Traveler
-	reflex the_traveler when : (current_hour = 20 and (flip(proba_travel) or stat_traveler = leave) and not lockdown and not quarantine_status and quarantine_place = none and live = true){ //Jadi syarat orang traveler tu jam 8 malam sama proba
+	reflex the_traveler when : (current_hour = 20 and ((flip(proba_travel) and traveler_days = 0) or stat_traveler = leave) and not lockdown and quarantine_place = none and live = true){ //Jadi syarat orang traveler tu jam 8 malam sama proba
 		if (traveler_days = 0) {
-			Building s <- one_of(buildings_per_activity["station"]);
+			Building s <- one_of(buildings_per_activity[station]);
 			do enter_building(s);
 			stat_traveler <- leave;
 			traveler_days <- traveler_days + 1;
@@ -215,68 +175,69 @@ species Individual {
 			traveler_days <- traveler_days + 1;
 			}
 		else {
+			do enter_building(home); //Pulang
+			
+			// Ternyata positif
 			float mask_factor <- 1 - mask_effectiveness*mask_usage_proportion;
 			float proba <- 0.0;
 			
-			if (covid_stat = false){
+			if (covid_stat = none){
 				list<int> l <- match_age(susceptibility.keys);
 				proba <- get_proba(susceptibility[l],"gauss");
-				proba <- proba * mask_factor;
+				proba <- proba * mask_factor * proba_travel_infected;
 			}
 			
 			if (flip(proba)) {
-				covid_stat <- true;
+				covid_stat <- exposed;
 				incubation_period <- 0;
 			}
 			
 			stat_traveler <- none;
 			traveler_days <- 0;
 			stat_covid <- suspect;
-			
-			do enter_building(home); //Kalau udah ya dipulangkan
+			bool quarantine <- flip(obedience*quarantine_obedience);
+			if (quarantine){
+				quarantine_place <- house;
+			} else if (not(quarantine)) {
+				quarantine_place <- none;
 			}
+			
 		}
+	}
 	
 	// 2. Reflex Kematian	
-	reflex death when : (current_hour = 23 and live = true){
-		Building c <- one_of(buildings_per_activity["cemetary"]);
-		if (stat_covid in [normal,recovered,discarded]){
-			if (flip(death_proba)){
+	reflex death when : (current_hour = 21 and live = true){
+		Building c <- one_of(buildings_per_activity["cemetery"]);
+		if (flip(death_proba)){
+			if (stat_covid in [normal,recovered,discarded]){
 				live <- false;
 				do enter_building(c);
-			}
-		}
-		else if (stat_covid = confirmed){
-			if (flip(death_proba)){
+			} else if (stat_covid = confirmed){
 				live <- false;
 				stat_covid <- death;
 				do enter_building(c);
-			}
-		}
-		else {
-			if (flip(death_proba)){
+			} /*else {
 				live <- false;
 				stat_covid <- probable;
 				do enter_building(c);
-			}
+			}*/
+		} else {
+			live <- true;
 		}
 	}
 	
 	// 3. Reflex Menjalankan Agenda
-	reflex execute_agenda when: (not quarantine_status and quarantine_place = none and stat_traveler != leave and live = true) {
-	//Kalau status karantina dan status bepergian tidak aktif	 
+	reflex execute_agenda when: (quarantine_place = none and stat_traveler != leave and live = true) {
+	//Kalau status karantina dan status bepergian tidak aktif
 		map<int, Building> agenda_day <- agenda_week[current_day_of_week];
 		if (agenda_day[current_hour] != nil) {
 			do enter_building(agenda_day[current_hour]);
-			if (agenda_day[current_hour] = one_of(Building where possible_minors)){
-				property <- property - salary*0.1;
+			if (agenda_day[current_hour].type = any(possible_minors)){
+				if (age > 17 and age <= max_working_age){
+					property <- property - 5;
+				}
 			}
-			
-			if (stat_traveler = "come"){ //Jika dia traveler maka akan bertambah hari traveler nya
-				traveler_days <- traveler_days - 1;
-			}
-			
-			if (not (major_agenda_type in [none])) {
+			if (agenda_day[current_hour].type in [major_agenda_place]) {
 				meet_yesterday <- meet_today;
 				meet_today <- self.major_agenda_place.residents - self;
 			}
@@ -284,7 +245,7 @@ species Individual {
 	}
 	
 	// 4. Reflex Add Minor Agenda
-	reflex minor_agenda when: ((current_hour = 0) and (not quarantine_status and quarantine_place = none) and age >= min_student_age and age <= max_working_age and live = true) {
+	reflex minor_agenda when: ((current_hour = 0) and age >= min_student_age and age <= max_working_age and live = true) {
 		
 		float proba_activity;
 		list<int> start_end_hours <- major_agenda_hours[current_day_of_week];
@@ -316,130 +277,240 @@ species Individual {
 	}
 	
 	// 6. Reflex economical
-	reflex economical when: current_day = 7 and current_hour = 18 and live = true {
+	reflex economical when: age >= 19 and age <= max_working_age and current_day = 7 and current_hour = 18 and live = true {
 		if (is_employed){
-			property <- property + salary; //Kekayaan ditambah dengan gaji
-			self.home.total_property <- self.home.total_property + property; //Harta 1 keluarga
+			if (not lockdown or not psbb or not new_normal){
+				property <- property + salary; //Kekayaan ditambah dengan gaji
+				self.home.total_property <- self.home.total_property + salary; //Harta 1 keluarga
+			} else {
+				property <- property + covid_salary; //Kekayaan ditambah dengan gaji
+				self.home.total_property <- self.home.total_property + covid_salary; //Harta 1 keluarga
+			}
+		} else if (major_agenda_type = "school" and age >= 17) {
+			property <- property + salary;
+			self.home.total_property <- self.home.total_property - salary; //Biaya hidup ditanggung keluarga
 		}
 		
-		float x <- rnd(0.1,2); //Biaya hidup orang2 sesuai dengan gaya masing2
-			float out <- salary*x;
-			if (out < 450.0){ //Jika biaya hidup nya dibawah setengah biaya hidup rata2 di Surabaya maka dibuat segitu
-				out <- 450.0;
-			}
-			property <- property - (salary*x); //Belanja disesuaikan dengan gaji
-			self.home.total_property <- self.home.total_property - (salary*x);
-			
-		if (age >= min_working_age and age <= max_student_age and major_agenda_type != "school"){
-			if (self.home.total_property > 0){
-				poor <- false;
-			} else if (self.home.total_property <= 0){
-				poor <- true;
-			}
+		float x <- rnd(0.5,2.0); //Biaya hidup orang2 sesuai dengan gaya masing2;
+		if (poor){
+			x <- rnd(0.1,1.0); //Kalau miskin orang2 berhemat
+		}
+	
+		float out <- salary*x;
+		if (out < 500.0){ //Jika biaya hidup nya dibawah setengah biaya hidup rata2 di Surabaya maka dibuat segitu
+			out <- 500.0;
+		}
+		
+		if (major_agenda_type = "school" and age >= 17){
+			property <- property - (out); //Pengeluaran hanya kena ke harta pribadi, karena harta rumah dikurangi diawal
+		} else {
+			property <- property - (out); //Belanja disesuaikan dengan gaji
+			self.home.total_property <- self.home.total_property - (out);
+		}
+		
+		if (property > 550){
+			poor <- false;
+		} else {
+			poor <- true;
 		}
 	}
 	
 	// Reflex Individual Klinis
 	
 	// 1. Reflex Test Rapid
-	reflex rapid_test when: (current_hour = 6 and (symptomps = mild or must_rapid_test)) and live = true {
+	reflex rapid_test when: current_hour = 6 and (must_rapid_test and flip(proba_test)) and stat_traveler != leave and stat_covid != confirmed and live {
 		Building h <- one_of(buildings_per_activity["hospital", "clinic"]);
 		do enter_building(h);
-		if (covid_stat) {
-			bool test_result <- flip(sensitivity_rapid); //Harus test rapid (Penting)
+		if (covid_stat in [infected]) {
+			bool test_result <- flip(sensitivity_rapid*test_accuracy); //Harus test rapid (Penting)
 			if (test_result) {//true positive
 				stat_covid <- confirmed;
-				quarantine_status <- true;
-				rapid_result <- 1;
 				do contact_trace;
-			}
-			else { //si yang sebenarnya positif tp hasil tesnya negatif
-				if (symptomps = mild or asymptomic) {
-					stat_covid <- suspect;
-					quarantine_status <- flip(obedience*quarantine_obedience);
+				if (symptomps in none){
+					symptomps <- asymptomic;
 				}
-				else {
-					stat_covid <- probable;
-					quarantine_status <- true;
-					must_PCR_test <- true;
-				}
-				rapid_result <- 2;
-			}
-		}
-		else {
-			bool test_result <- flip(specificity_rapid);
-			if (test_result) {
-				if (symptomps = mild or asymptomic) {
-					stat_covid <- suspect;
-					quarantine_status <- flip(obedience*quarantine_obedience);
-				}
-				else {
-					stat_covid <- probable;
-					quarantine_status <- true;
-					must_PCR_test <- true;
-				}
-				rapid_result <- 2;
-			}
-			else { //si yang sebenarnya negatif tp hasil tesnya positif
-				stat_covid <- confirmed;
-				quarantine_status <- true;
-				rapid_result <- 1;
-				do contact_trace;
-			}
-		}
-		
-	} 
-	
-	// 2. Reflex PCR Test (Inisiasi)
-	reflex pcr_test when: (current_hour = 6 and (must_PCR_test or symptomps in [moderate,severe])) and live {
-		if (PCR_waiting_day != 2) {
-			have_PCR <- true;
-			quarantine_status <- true;
-			quarantine_place <- house;
-			PCR_waiting_day <- PCR_waiting_day + 1;
-			}
-		else {
-			do real_PCR;
-			PCR_waiting_day <- 0;
-			must_PCR_test <- false;
-			quarantine_period <- 2;
-			if (PCR_negative_count = 2){
-				quarantine_status <- false;
-				quarantine_place <- none;
-				stat_covid <- "recovered";
-			} else {
-				switch severity {
+				switch symptomps {
 					match mild {
 						quarantine_place <- hospital;
 					}
 					match moderate {
 						quarantine_place <- hospital;
 					}
-					match severe {
-						quarantine_place <- ICU;
-					}
-					match deadly {
-						quarantine_place <- ICU;
-					}
 					match asymptomic {
+						do enter_building(home);
+						quarantine_place <- house;
+					}
+					match none {
+						do enter_building(home);
 						quarantine_place <- house;
 					}
 				}
-			} 
+				quarantine_period <- 0;
+			} else if (not(test_result)) { //si yang sebenarnya positif tp hasil tesnya negatif
+				do enter_building(home);
+				if (symptomps in [mild,asymptomic]){
+					stat_covid <- probable;
+					bool quarantine <- flip(obedience*quarantine_obedience);
+					if (quarantine){
+						quarantine_place <- house;
+					} else if (not(quarantine)) {
+						quarantine_place <- none;
+					}
+				}
+				else if (symptomps in [moderate]) {
+					stat_covid <- probable;
+					must_PCR_test <- true;
+					quarantine_place <- house;
+				}
+			}
+		} else if (covid_stat in [none,exposed]) {
+			bool test_results <- flip(specificity_rapid*test_accuracy);
+			if (test_results) {
+				do enter_building(home);
+				quarantine_place <- none;
+			} else if (not(test_results)){ //si yang sebenarnya negatif tp hasil tesnya positif
+				stat_covid <- confirmed;
+				do contact_trace;
+				switch symptomps {
+					match mild {
+						quarantine_place <- hospital;
+					}
+					match moderate {
+						quarantine_place <- hospital;
+					}
+					match asymptomic {
+						do enter_building(home);
+						quarantine_place <- house;
+					}
+					match none {
+						do enter_building(home);
+						quarantine_place <- house;
+					}
+				}
+				quarantine_period <- 0;
+			}
 		}
+		must_rapid_test <- false; // Harus diinisiasi ulang biar orang ga test rapid terus2an tiap hari
+	}
+	
+	// 2. Reflex Test PCR
+	reflex pcr_test when: current_hour = 6 and (must_PCR_test and flip(proba_test)) and stat_covid != confirmed and stat_traveler != leave and live {
+		Building h <- one_of(buildings_per_activity["hospital", "clinic"]);
+		do enter_building(h);
+		if (covid_stat in [infected]) {
+			bool test_result <- flip(sensitivity_pcr*test_accuracy); //Harus test rapid (Penting)
+			if (test_result) {//true positive
+				stat_covid <- confirmed;
+				do contact_trace;
+				if (symptomps in none){
+					symptomps <- asymptomic; 
+				}
+				quarantine_period <- 0;
+				switch symptomps {
+					match mild {
+						quarantine_place <- hospital;
+					}
+					match moderate {
+						quarantine_place <- hospital;
+					}
+					match asymptomic {
+						do enter_building(home);
+						quarantine_place <- house;
+					}
+					match none {
+						do enter_building(home);
+						quarantine_place <- house;
+					}
+				}
+			}
+			else if (not(test_result)) { //si yang sebenarnya positif tp hasil tesnya negatif
+				do enter_building(home);
+				if (symptomps in [mild,asymptomic]){
+					stat_covid <- suspect;
+					bool quarantine <- flip(obedience*quarantine_obedience);
+					if (quarantine){
+						quarantine_place <- house;
+					} else if (not(quarantine)) {
+						quarantine_place <- none;
+					}
+				}
+				else if (symptomps in [moderate]) {
+					stat_covid <- probable;
+					must_PCR_test <- true;
+					quarantine_place <- hospital;
+				}
+			}
+		} else if (covid_stat in [none,exposed]) {
+			bool test_results <- flip(specificity_pcr*test_accuracy);
+			if (test_results) {
+				if (symptomps in [mild,asymptomic,none]) {
+					do enter_building(home);
+					stat_covid <- suspect;
+					bool quarantine <- flip(obedience*quarantine_obedience);
+					if (quarantine){
+						quarantine_place <- house;
+					} else if (not(quarantine)) {
+						quarantine_place <- none;
+					}
+				}
+				else if (symptomps in [moderate]) {
+					stat_covid <- probable;
+					quarantine_place <- hospital;
+				}
+			}
+			else if (not(test_results)) { //si yang sebenarnya negatif tp hasil tesnya positif
+				stat_covid <- confirmed;
+				death_recovered_period <- 24 * 14;
+				do contact_trace;
+				switch symptomps {
+					match mild {
+						quarantine_place <- hospital;
+					}
+					match moderate {
+						quarantine_place <- hospital;
+					}
+					match asymptomic {
+						do enter_building(home);
+						quarantine_place <- house;
+					}
+					match none {
+						do enter_building(home);
+						quarantine_place <- house;
+					}
+				}
+				quarantine_period <- 0;
+			}
+		}
+		must_PCR_test <- false;
 	}
 	
 	// 3. Infeksi
-	reflex infection when: (quarantine_place in [house,none]) and live { //Syarat nya adalah jika serumah dengan orang yang positif atau ga karantina
+	reflex infection when: (current_place != buildings_per_activity["train_station","cemetery"]) and (quarantine_place in [house,none]) and live {
+		/*
+		 * Fungsi Infeksi :
+		 * 1. Syaratnya berada didalam ruangan selain stasiun dan kuburan
+		 * 2. Sedang karantina di rumah atau tidak karantina
+		 * 3. Hidup
+		 * 
+		 * Alur:
+		 * 1. Hitung jumlah orang didalam ruangan
+		 * 2. Hitung jumlah yang terinfeksi
+		 * 3. Hitung yang karantina (Jika dirumah)
+		 * 4. Hitung faktor masker
+		 * 5. Hitung probabilitas
+		 * 6. Ambil kemungkinan, jika masih negatif maka ada kemungkinan positif
+		 * 7. Covid status dari none menjadi terpapar (exposed)
+		 * 8. Infection period dimulai
+		 */
 		
-		list<Individual> people_inside <- current_place.Individuals_inside where (not dead(each));
+		list<Individual> people_inside <- current_place.Individuals_inside;
 		int num_people <- length(people_inside - self);
-		int num_infected <- length(people_inside where (each.quarantine_status = false and each.covid_stat = true));
-		int num_quarantined <- length(people_inside where (each.quarantine_status = true and each.covid_stat = true));
+		int num_infected <- length(people_inside where (each.quarantine_place = none and each.covid_stat = infected));
+		int num_quarantined <- length(people_inside where (each.quarantine_place = none and each.covid_stat = infected));
 		float mask_factor <- 1 - mask_effectiveness*mask_usage_proportion;
 		float proba <- 0.0;
 		
-		if (covid_stat = false){
+		if (covid_stat = none){
 			if (num_people > 0){
 				float infection_proportion <- (num_infected+proportion_quarantined_transmission*num_quarantined)/num_people;
 				list<int> l <- match_age(susceptibility.keys);
@@ -447,28 +518,50 @@ species Individual {
 				proba <- proba * infection_proportion * mask_factor;
 			}
 		if (flip(proba)) {
-			covid_stat <- true;
-			incubation_period <- 0;
+			covid_stat <- exposed;
+			infection_period <- 0;
 			}
 		}
 	}
 	
 	// 4. Update status infeksi biar timbul gejala
-	reflex update_infection when: (covid_stat) and live = true {
+	reflex update_infection when: (covid_stat in [exposed,infected]) and live = true {
+		/*
+		 * Syarat :
+		 * 1. Covid status adalah terpapar dan positif
+		 * 
+		 * Alur :
+		 * 1. Jika periode infeksi masih 0, maka dia mengambil distribusi untuk periode inkubasi
+		 * 2. Jika mencapai periode inkubasi H-1 maka Covid status menjadi positif
+		 * 3. Jika mencapai periode inkubasi maka akan di inisiasi infeksi untuk memunculkan symptomps, periode sakit dan periode sehat
+		 * 4. Jika mencapai periode sakit maka symptomps akan berubah menjadi keparahan
+		 * 5. Jika mencapai periode sehat, maka orang diharuskan untuk test
+		 */
 		if (infection_period = 0) {
+			// Menentukan kapan hari gejala timbul
+			list<int> l <- match_age(incubation_distribution.keys);
+			incubation_period <- (24*incubation_distribution[l]);
 			infection_period <- infection_period + 1;
 		} else {
-			
 			infection_period <- infection_period + 1;
 			
-			if (infection_period = incubation_period) {
+			// Merubah status sebenarnya menjadi terinfeksi
+			if (infection_period = incubation_period-24){
+				covid_stat <- infected;
+				
+			// Mengambil periode sakit dan sehat serta memunculkan gejala
+			} else if (infection_period = incubation_period) {
 				
 				do init_infection;
-				// Jika gejala moderate ama severe dia ga harus rapid dulu, langsung aja PCR
-				if (symptomps in [moderate,severe] and not quarantine_status){
+				// Jika gejala moderate dia ga harus rapid dulu, langsung aja PCR
+				if (symptomps in [moderate]){
 					must_PCR_test <- true;
+				// Jika gejala mild maka dia harus rapid terlebih dahulu
+				} else if (symptomps in [mild]){
+					must_rapid_test <- true;
 				}
 				
+			// Merubah gejala menjadi keparahan, meningkat	
 			} else if (infection_period = illness_period) {
 				if (symptomps = asymptomic){
 					severity <- one_of(asymptomic,mild,moderate,severe,deadly);
@@ -478,55 +571,68 @@ species Individual {
 					severity <- one_of(moderate,severe,deadly);
 				}
 				
+				bool quarantine <- flip(obedience*quarantine_obedience);
 				switch severity {
+					match asymptomic {
+						if (quarantine){
+							quarantine_place <- house;
+						}
+					}
 					match mild {
-						quarantine_place <- hospital;
+						if (quarantine){
+							do enter_building(one_of(buildings_per_activity["hospital","clinic"]));
+							quarantine_place <- hospital;
+						}
+						death_proba <- 1.05*death_proba;
 					}
 					match moderate {
-						quarantine_place <- hospital;
+						if (quarantine){
+							do enter_building(one_of(buildings_per_activity["hospital","clinic"]));
+							quarantine_place <- hospital;
+						}
+						death_proba <- 1.05*death_proba;
 					}
 					match severe {
+						do enter_building(one_of(buildings_per_activity["hospital","clinic"]));
 						quarantine_place <- ICU;
+						death_proba <- 1.5*death_proba;
 					}
 					match deadly {
+						do enter_building(one_of(buildings_per_activity["hospital","clinic"]));
 						quarantine_place <- ICU;
-					}
-					match asymptomic {
-						quarantine_place <- house;
+						death_proba <- 1.7*death_proba;
 					}
 				}
 				
-			// Recovery dan kematian
-			} else if (infection_period = death_recovered_period) { //Masih error krna datanya blm ada di parameter
-					must_PCR_test <- true;
-					covid_stat <- false;
+			// Merubah atribut klinis menjadi inisiasi awal
+			} else if (infection_period = death_recovered_period) {
+					//must_PCR_test <- true;
+					covid_stat <- none;
 					infection_period <- 0;
-					death_proba <- 0.5;
+					death_proba <- proba_death;
 					severity <- none;
 					symptomps <- none;
+					stat_covid <- recovered;
+					quarantine_place <- none;
+					quarantine_period <- 0;
 				//Else nya ya berarti pilihannya akan mati deh atau tambah
 			}
 		}
 	}
 	
-	// 7. Reflex Update Quarantine (Belum, menunggu dari Azka)
-	reflex update_quarantine when: (current_hour = 1 and quarantine_status) and live {
-		if (stat_covid in ["suspect", "probable"]) {
-			if (quarantine_period = 13){
-				quarantine_status <- false;
+	// 7. Reflex Update Quarantine
+	reflex update_quarantine when: (quarantine_place in [house,hospital,ICU]) and live {
+		if (stat_covid in [suspect, probable]) {
+			if (quarantine_period = 13*24){
 				quarantine_place <- none;
+				stat_covid <- discarded;
+				quarantine_period <- 0;
 			}
 			else {
 				quarantine_period <- quarantine_period + 1;
 			}
-		}
-		else{ //if stat_covid = confirmed
-			if (quarantine_period = 6){
-				must_PCR_test <- true;
-			}
-			else {
-				quarantine_period <- quarantine_period + 1;
-			}
+		} else if (stat_covid in confirmed) { //if stat_covid = confirmed
+			quarantine_period <- quarantine_period + 1;
 		}
 	}
 	
@@ -565,9 +671,9 @@ species Individual {
 		}
 	}
 	
-	aspect circle {
+	/*aspect circle {
 		if (stat_covid = suspect) {
-			draw circle(8) color: #yellow;
+			draw circle(8) color: #white;
 		} else if (stat_covid = probable) {
 			draw circle(8) color: #orange;
 		} else if (stat_covid = confirmed) {
@@ -579,11 +685,23 @@ species Individual {
 		} else if (stat_covid = recovered) {
 			draw circle(8) color: #green;
 		} else if (stat_covid = normal) {
-			draw circle(8) color: #white;
+			draw circle(8) color: #yellow;
+		} else if (covid_stat = true) {
+			draw circle(8) color: #purple;
 		}
-		highlight self color: #white;
-	} //Untuk menentukan warna dari agent jika berubah status
+		highlight self color: #yellow;
+	} //Untuk menentukan warna dari agent jika berubah status*/
 	
+	aspect circle {
+		if (covid_stat = infected) {
+			draw circle(8) color: #red;
+		} else if (covid_stat = none) {
+			draw circle(8) color: #green;
+		} else if (covid_stat = exposed) {
+			draw circle(8) color: #blue;
+		}
+		highlight self color: #yellow;
+	}
 		
 }
 
@@ -595,7 +713,7 @@ species Building {
 	bool family_poor;
 	list<Individual> Individuals_inside;
 	list<Individual> residents;
-	reflex economical_home when: (type = home and current_day = 7){
+	reflex economical_home when: (type in possible_livings and current_day = 7){
 		if (total_property > 0){
 			family_poor <- false;
 		} else {
@@ -611,6 +729,15 @@ species Building {
 species Boundary {
 	aspect geom {
 		draw shape color: #turquoise;
+		/*if (lockdown){
+			draw shape color: #black;
+		} else if (psbb){
+			draw shape color: #brown;
+		} else if (new_normal){
+			draw shape color: #orange;
+		} else {
+			draw shape color: #turquoise;
+		}*/
 	}
 }
 

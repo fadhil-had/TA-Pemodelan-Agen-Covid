@@ -28,7 +28,6 @@ global {
 	int num_hospitalized <- 0;
 	int num_ICU <- 0;
 	int num_travel <- 0;
-	int num_come <- 0;
 	int num_poor <- 0;
 	int num_family_poor <- 0;
 	
@@ -47,114 +46,11 @@ global {
 	int recovered_temp <- 0;
 	int death_temp <- 0;
 	int travel_temp <- 0;
-	
-	//int total_testst <- 0;
+	int confirmed_temp <- 0;
 	
 	int pos_decrease_counter <- 0;
 	int param_mobility <- 0;
 	
-	map<int, int> count_today;
-	int come_today <- 0;
-	int come_weekly <- 0;
-	int average_come <- 0;
-	
-	
-	reflex travel_coming when : (current_hour = 20 and flip(proba_travel) and not lockdown) { //Jika jam 8 malam dan flip proba maka dibuat individual
-		int num_family_traveler <- rnd(20,100);
-		int limit_travel_group <- rnd(7,21);
-		if (psbb) {
-			num_family_traveler <- rnd(20,50); //Jika PSBB maka jumlah keluarga yang datang dibatasi jadi maksimal 50 per hari
-			int limit_travel_group <- rnd(7,14); //Waktu juga dikurangi seminggu
-		}
-		loop times: num_family_traveler {
-			ask one_of(buildings_per_activity["hotel"]){ //Pilih salah satu hotel
-				if (flip(proba_travel_family)) { //Buat individu
-				
-					create Individual {
-						age <- rnd(min_working_age,max_working_age);
-						sex <- 1;
-						home <- myself;
-						myself.residents << self;
-						traveler_days <- limit_travel_group;
-						stat_traveler <- come;
-					}
-				
-					create Individual {
-						age <- rnd(min_working_age,max_working_age);
-						sex <- 0;
-						home <- myself;
-						myself.residents << self;
-						traveler_days <- limit_travel_group;
-						stat_traveler <- come;
-					}
-				
-					int num_children <- rnd(0,max_num_children);
-					loop times: num_children {
-						create Individual {
-							age <- rnd(min_age,max_student_age);
-							sex <- rnd(0,1);
-							home <- myself;
-							myself.residents << self;
-							traveler_days <- limit_travel_group;
-							stat_traveler <- come;
-						}
-					}
-				
-					if (flip(proba_grandfather)) {
-						create Individual {
-							age <- rnd(max_working_age+1,max_age);
-							sex <- 1;
-							home <- myself;
-							myself.residents << self;
-							traveler_days <- limit_travel_group;
-							stat_traveler <- come;
-						}
-					}
-				
-					if(flip(proba_grandmother)) {
-						create Individual {
-							age <- rnd(max_working_age+1,max_age);
-							sex <- 0;
-							home <- myself;
-							myself.residents << self;
-							traveler_days <- limit_travel_group;
-							stat_traveler <- come;
-						}
-					}
-				
-					if(flip(proba_others)) {
-						create Individual {
-							age <- rnd(min_working_age,max_working_age);
-							sex <- rnd(0,1);
-							home <- myself;
-							myself.residents << self;
-							traveler_days <- limit_travel_group;
-							stat_traveler <- come;
-						}
-					}
-				
-				} else {
-					// Individual yang datang sendirian
-					
-					create Individual {
-						age <- rnd(min_working_age,max_age);
-						sex <- rnd(0,1);
-						home <- myself;
-						myself.residents << self;
-						traveler_days <- limit_travel_group;
-						stat_traveler <- come;
-					}
-				}
-			}
-		}
-		come_today <- length(Individual) - num_population;
-	}
-
-	reflex bye_traveler when : (current_hour = 19){ //Ini fungsi untuk test apakah mereka akan pergi atau ga wkwk, belum pasti
-		ask Individual where (each.stat_traveler = come and each.traveler_days = 0){
-			do die;
-		}
-	}
 	
 	reflex update_data when: current_hour = 23 {
 		/*
@@ -163,25 +59,24 @@ global {
 		 * pada grafik di experiment.gaml.
 		 */
 		
-		num_suspect <- population count (each.stat_covid in suspect);
+		num_suspect <- population count (each.stat_covid in suspect and each.live);
 		num_probable <- population count (each.stat_covid in probable);
-		num_confirmed <- population count (each.stat_covid in confirmed);
+		num_confirmed <- population count (each.stat_covid in confirmed and each.live);
 		num_discarded <- population count (each.stat_covid in discarded);
-		num_recovered <- population count (each.stat_covid in recovered);
-		num_death <- population count (each.stat_covid in death);
-		num_positive <- population count (each.covid_stat);
-		num_hospitalized <- population count (each.quarantine_place = hospital);
-		num_ICU <- population count (each.quarantine_place = ICU);
-		num_travel <- population count (each.stat_traveler in leave);
-		num_come <- population count (each.stat_traveler in come);
-		num_poor <- population count (each.poor);
-		num_family_poor <- Building count (each.type = home and each.family_poor);
+		num_recovered <- population count (each.stat_covid in recovered and each.live);
+		num_death <- population count (each.stat_covid in death and each.live);
+		num_positive <- population count (each.covid_stat in infected and each.live);
+		num_hospitalized <- population count (each.quarantine_place = hospital and each.live);
+		num_ICU <- population count (each.quarantine_place = ICU and each.live);
+		num_travel <- population count (each.stat_traveler in leave and each.live);
+		num_poor <- population count (each.poor and each.live);
+		num_family_poor <- Building count (each.type in [possible_livings] and each.family_poor);
 		
-		confirmed_today <- population count (each.stat_covid in [confirmed] and each.infection_period < 24);
-		positive_today <- population count (each.covid_stat and each.infection_period < 24);
+		confirmed_today <- population count (each.stat_covid in confirmed and each.quarantine_period < 20 and each.live);
+		positive_today <- population count (each.covid_stat in [infected] and (each.infection_period-each.incubation_period+24) < 24 and (each.infection_period-each.incubation_period+24) >= 0 and each.live);
 		recovered_today <- num_recovered - recovered_temp;
 		death_today <- num_death - death_temp;
-		hospitalized_today <- population count ((each.quarantine_place in [hospital,ICU]) and each.quarantine_period < 24);
+		hospitalized_today <- population count ((each.quarantine_place in [hospital,ICU]) and each.quarantine_period < 24 and each.live);
 		travel_today <- num_travel - travel_temp;
 		
 		// Untuk melihat kualitas layanan sebagai syarat dari lockdown, masih akan dikaji
@@ -198,16 +93,11 @@ global {
 		recovered_yesterday <- recovered_today;
 		death_temp <- num_death;
 		travel_temp <- num_travel;
+		confirmed_temp <- num_confirmed;
 		
 		positive_yesterday <- positive_today;
 		
-		int d <- current_day_of_week;
-		come_weekly <- come_weekly - count_today[d]; //Kurangi dengan hari minggu lalu
-		count_today[d] <- come_today; //Ganti isi hari minggu lalu dengan minggu ini
-		come_weekly <- come_weekly + count_today[d]; //Tambahin ke come weekly
-		average_come <- come_weekly div 7; //Rata2in deh
-		
-		if ((travel_today/num_population > 0.1) and (average_come > 300)){
+		if (travel_today/num_population > 0.001){
 			param_mobility <- param_mobility + 1;
 		} else {
 			param_mobility <- 0;
@@ -235,17 +125,25 @@ global {
 					loop agenda_day over:agenda_week {
 						int start_hour <- min(agenda_day.keys);
 						agenda_day[start_hour] <- home;
+						if (occupation = "wiraswasta"){
+							covid_salary <- rnd(0.0,salary*0.5);
+						} else if (occupation in ["swasta_free","swasta_office","industrial","bumn"]){
+							covid_salary <- salary*0.5;
+						} else if (occupation in ["pns"]){
+							covid_salary <- salary*0.8;
+						}
 					}
 				}
 			}
 		}
 		lockdown <- true;
+		psbb <- false;
 		new_normal <- false;
-		activity_reduction_factor <- 1.0;
-		mask_usage_proportion <- 0.9;
+		activity_reduction_factor <- activity_reduction_lockdown;
+		mask_usage_proportion <- 1.0;
 	}
 	
-	reflex psbb when: num_confirmed >= psbb_threshold and num_confirmed < lockdown_threshold and not lockdown and not psbb { //https://www.pikiran-rakyat.com/nasional/pr-01352541/pakar-ui-sebut-ada-3-kriteria-yang-perlu-dilihat-menuju-indonesia-lockdown-dalam-mencegah-corona
+	reflex psbb when: num_confirmed >= psbb_threshold and not lockdown and not psbb { //https://www.pikiran-rakyat.com/nasional/pr-01352541/pakar-ui-sebut-ada-3-kriteria-yang-perlu-dilihat-menuju-indonesia-lockdown-dalam-mencegah-corona
 		/* 
 		 * Kalau sedang lockdown, gabisa langsung PSBB, tp harus ke new normal dulu
 		 * Jam malam diberlakukan sehingga diatas jam 8 gaboleh keluar sama sekali
@@ -264,23 +162,54 @@ global {
 						agenda_day[end_hour] <- home;
 					}
 				}
-			} else {
+			} else if (occupation in ["wiraswasta"]){
+				ask individuals_per_profession[occupation] {
+					loop agenda_day over:agenda_week {
+						int start_hour <- min(agenda_day.keys);
+						agenda_day[start_hour] <- major_agenda_place;
+						covid_salary <- rnd(salary*0.25,salary*0.75); 
+					}
+				}
+			} else if (occupation in ["indusrial","pns","police"]){
+				ask individuals_per_profession[occupation] {
+					int wfh_day_1 <- one_of (major_agenda_hours.keys);
+					int wfh_day_2 <- one_of (major_agenda_hours.keys - wfh_day_1);
+					int wfh_day_3 <- one_of (major_agenda_hours.keys - wfh_day_1 - wfh_day_2);
+					int start_hour <- min(major_agenda_hours[wfh_day_1]);
+					agenda_week[wfh_day_1][start_hour] <- home;
+					start_hour <- min(major_agenda_hours[wfh_day_2]);
+					agenda_week[wfh_day_2][start_hour] <- home;
+					start_hour <- min(major_agenda_hours[wfh_day_3]);
+					agenda_week[wfh_day_3][start_hour] <- home;
+					covid_salary <- rnd(salary*0.5,salary*0.8); 
+				}
+			}
+			else {
 				// Menyuruh Individual yang bekerja di selain nakes full wfh
 				ask individuals_per_profession[occupation] {
 					loop agenda_day over:agenda_week {
 						int start_hour <- min(agenda_day.keys);
 						agenda_day[start_hour] <- home;
+						covid_salary <- rnd(salary*0.5,salary*0.8); 
 					}
 				}
 			}
+			loop places over: buildings_per_activity.keys{
+			if (places = one_of(possible_minors)){
+				ask buildings_per_activity[places]{
+					capacity <- capacity div 2;
+				}	
+			}
 		}
-		lockdown <- true;
+		}
+		lockdown <- false;
+		psbb <- true;
 		new_normal <- false;
 		activity_reduction_factor <- activity_reduction_psbb;
 		mask_usage_proportion <- 0.75;
 	}
 	
-	reflex new_normal when: pos_decrease_counter = new_normal_threshold and (lockdown or psbb) and not new_normal {
+	reflex new_normal when: pos_decrease_counter = new_normal_threshold and num_confirmed < psbb_threshold and (lockdown or psbb) and not new_normal {
 		
 		/*
 		 * PSBB sama lockdown diangkat jika point mencapai threshold
@@ -299,7 +228,7 @@ global {
 						agenda_day[end_hour] <- home;
 					}
 				}
-			} else if (occupation != ["none","wiraswasta","industrial","swasta_free"]){
+			} else if (occupation != ["none","wiraswasta","industrial","swasta_free","police"]){
 				ask individuals_per_profession[occupation] {
 					int wfh_day_1 <- one_of (major_agenda_hours.keys);
 					int wfh_day_2 <- one_of (major_agenda_hours.keys - wfh_day_1);
@@ -310,12 +239,14 @@ global {
 					agenda_week[wfh_day_2][start_hour] <- home;
 					start_hour <- min(major_agenda_hours[wfh_day_3]);
 					agenda_week[wfh_day_3][start_hour] <- home;
+					covid_salary <- rnd(salary*0.75,salary);
 				}
 			} else {
 				ask individuals_per_profession[occupation] {
 					loop agenda_day over: agenda_week {
 						int start_hour <- min(agenda_day.keys);
 						agenda_day[start_hour] <- major_agenda_place;
+						covid_salary <- salary; 
 					}
 				}
 			}
@@ -329,12 +260,13 @@ global {
 		}
 
 		lockdown <- false;
+		psbb <- false;
 		new_normal <- true;
-		activity_reduction_factor <- 0.5;
+		activity_reduction_factor <- activity_reduction_newnormal;
 		mask_usage_proportion <- 0.5;
 	}
 	
-	reflex full_normal when: confirmed_today = 0 and (lockdown or psbb or new_normal) {
+	reflex full_normal when: confirmed_today = 0 and pos_decrease_counter = normal_threshold and (lockdown or psbb or new_normal) {
 		
 		/*
 		 * Melakukan pengangkatan lockdown ketika counter penurunan
@@ -354,7 +286,15 @@ global {
 				}
 			}
 		}
+		loop places over: buildings_per_activity.keys{
+			if (places = one_of(possible_minors)){
+				ask buildings_per_activity[places]{
+					capacity <- capacity*2;
+				}	
+			}
+		}
 		lockdown <- false;
+		psbb <- false;
 		new_normal <- false;
 		activity_reduction_factor <- 0.0;
 		mask_usage_proportion <- 0.0;
