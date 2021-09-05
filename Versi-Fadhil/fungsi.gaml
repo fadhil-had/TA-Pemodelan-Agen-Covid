@@ -26,6 +26,9 @@ global {
 			match 6 {str <- "Minggu";}
 		}
 		if (lockdown) {
+			str <- str + " (LOCKDOWN)";
+		}
+		if (psbb) {
 			str <- str + " (PSBB)";
 		}
 		if (new_normal) {

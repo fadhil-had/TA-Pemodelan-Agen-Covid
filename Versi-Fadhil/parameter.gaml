@@ -20,7 +20,7 @@ global{
 	list<string> status_traveler <- [ //Status perjalanan agen manusia
 		"none", "commuter", "leave", "come"
 	];
-	int simulation_days; //Jumlah hari simulasi, input user
+	int simulation_days; //Jumlah hari simulasi, input uset
 	
 	float test_accuracy;
 	float contact_tracing_effectiveness; //Input from user
@@ -29,21 +29,25 @@ global{
 	float sensitivity_rapid <- 0.775; //Search data from journal
 	float specificity_rapid <- 0.87; //Search data from journal
 	float quarantine_obedience <- 0.73; //Initial obedience from data in journal
-	float mask_obedience <- 0.81; //Initial obedience from data in journal
 	float mask_effectiveness <- 0.77;
 	int lockdown_threshold; //Jumlah infeksi lockdown dilaksanakanan, input user
 	bool lockdown <- false; //Status lockdown
 	float activity_reduction_lockdown;
+	float infection_reduction_lockdown <- rnd(0.45,0.7);
 	int mobility_lockdown <- 5; //Input user, hari terjadi mobilisasi sesuai standar
 	bool psbb <- false;
 	int psbb_threshold; //Input user
 	float activity_reduction_psbb;
+	float infection_reduction_psbb <- rnd(0.35,0.55);
 	int new_normal_threshold; //Jumlah infeksi turun jika lockdown dilepas, input user
 	bool new_normal <- false; //Status lepas lockdown
 	float activity_reduction_newnormal;
+	float infection_reduction_newnormal <- rnd(0.25,0.35);
 	int normal_threshold; //Input user
-	float proba_travel <- 0.0001; //Kemungkinan orang melakukan perjalanan
+	float proba_travel <- 0.0005; //Kemungkinan orang melakukan perjalanan
 	float proba_travel_infected <- 0.25;
+	int poor_threshold;
+	
 	
 	//Demographical Parameters
 	int min_age <- 1;
@@ -201,7 +205,6 @@ global{
 	
 	
 	//BEHAVIORAL PARAMETERS
-	float proba_voluntary_random_test <- 0.05; //Kemungkinan test secara volunteer
 	float proba_test <- 0.95; //Kemungkinan test
 	float proba_activity_morning <-0.15;
 	float proba_activity_daytime <-0.25;
@@ -215,9 +218,8 @@ global{
 	];
 	float activity_reduction_factor <- 0.0;
 	float mask_usage_proportion <- 0.75; //Ga sesuai sumber atau sumbernya dari paper di grup
-	float infection_reduction_factor <- 0.0; //https://ejournal.upi.edu/index.php/image/article/download/24189/pdf
+	float infection_reduction_factor <- 0.1; //https://ejournal.upi.edu/index.php/image/article/download/24189/pdf
 	float proportion_quarantined_transmission <- 0.1; //Ga sesuai sumber???
-	float proba_death <- 0.002; //Kemungkinan mati
 	float obedience; //(Penting) Dipisah sebaiknya satu persatu. Ini bukannya udah ada di parameter.gaml?
 	
 	//Economical Parameter
@@ -232,23 +234,23 @@ global{
 		"junior_high_school"::[650.0,1175.0],
 		"senior_high_school"::[650.0,1175.0],
 		"university"::[650.0,1275.0],
-		"marketplace"::[125.0,2500.0],
+		"marketplace"::[500.0,2500.0],
 		"mall"::[500.0,2000.0],
 		"store"::[250.0,25250.0],
-		"supermarket"::[250.0,500.0],
-		"village_office"::[475.0,762.5],
+		"supermarket"::[500.0,600.0],
+		"village_office"::[500.0,762.5],
 		"subdistrict_office"::[675,962.5],
 		"government_office"::[850,1187.5],
-		"post_office"::[375.0,750.0],
+		"post_office"::[500.0,750.0],
 		"bank"::[687.5,1500.0],
-		"community_group_office"::[475.0,762.5],
+		"community_group_office"::[500.0,762.5],
 		"office"::[1000.0,12500.00],
 		"commercial"::[1000.0,12500.00],
 		"embassy"::[1150.0,2734.0],
 		"cafe"::[500.00,2250.0],
-		"clinic"::[187.5,916.5],
-		"hospital"::[375.0,2625.0],
-		"police"::[492.0,732.0],
+		"clinic"::[500.5,916.5],
+		"hospital"::[600.0,2625.0],
+		"police"::[500.0,732.0],
 		"industrial"::[1000.0,5000.00]
 	];
 	

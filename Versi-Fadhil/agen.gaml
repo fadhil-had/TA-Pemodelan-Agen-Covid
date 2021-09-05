@@ -11,6 +11,7 @@ model tugasAkhir
 import "init.gaml"
 import "fungsi.gaml"
 import "parameter.gaml"
+import "reflex_global.gaml"
 
 /* Insert your model definition here */
 
@@ -32,19 +33,21 @@ species Individual {
 	Building major_agenda_place;
 	list<map<int, Building>> agenda_week;
 	map<int,list<int>> major_agenda_hours;
+	list<Building> recreation_buildings <- [];
 	
 	// Atribut Klinis
 	string stat_covid <- normal; //Status Covid
 	string covid_stat <- none; //Untuk melihat secara pasti seseorang Covid atau bukan
 	string symptomps <- none; //Gejala awal sebelum pasti Covid
 	string severity <- none; //Keparahan Covid, muncul setelah fix Covid
-	float death_proba <- proba_death;
+	float death_proba <- 0.0086;
 	string quarantine_place <- none;
 	int infection_period <- 0; //Masa inkubasi seseorang
 	int incubation_period <- 0; //Masa inkubasi menuju timbul gejala
 	int quarantine_period <- 0; //Masa karantina
 	int illness_period <- 0; //Masa sakit
 	int death_recovered_period <- 0; //Masa menuju sehat
+	int recovered_period <- 0;
 	bool must_rapid_test <- false; //Status wajib test jika kena contact trace
  	bool must_PCR_test <- false; //Status wajib test jika kena contact trace
 	list<Individual> meet_today; //Untuk melihat yang ditemui di hari ini
@@ -84,11 +87,18 @@ species Individual {
 		int end <- rnd(start+1,max(the_time));
 		
 		if (not lockdown or not psbb) {
-			agenda_week[current_day_of_week][start] <- one_of(Building where (each.type in possible_minors));
+			agenda_week[current_day_of_week][start] <- one_of(recreation_buildings);
 			agenda_week[current_day_of_week][end] <- home;
-		} else { // lockdown
-			agenda_week[current_day_of_week][start] <- one_of(Building where (each.type in ["marketplace","store","supermarket"]));
-			agenda_week[current_day_of_week][end] <- home;
+		} else {
+			Building temp <- one_of (recreation_buildings);
+			if (temp.type in possible_markets) {
+				// Pada keadaan lockdown, aktivitas hanya berhasil direncanakan
+				// apabila pengacakan bangunan menghasilkan bangunan yang merupakan
+				// tempat belanja.
+				
+				agenda_week[current_day_of_week][start] <- temp;
+				agenda_week[current_day_of_week][end] <- home;
+			} // lockdown
 		}
 	}
 	
@@ -118,7 +128,7 @@ species Individual {
 						quarantine_place <- none;
 					}
 				}
-				must_rapid_test <- true;
+				must_rapid_test <- flip(proba_test*obedience);
 			}
 		}
 	}
@@ -216,11 +226,11 @@ species Individual {
 				live <- false;
 				stat_covid <- death;
 				do enter_building(c);
-			} /*else {
+			} else {
 				live <- false;
 				stat_covid <- probable;
 				do enter_building(c);
-			}*/
+			}
 		} else {
 			live <- true;
 		}
@@ -232,11 +242,6 @@ species Individual {
 		map<int, Building> agenda_day <- agenda_week[current_day_of_week];
 		if (agenda_day[current_hour] != nil) {
 			do enter_building(agenda_day[current_hour]);
-			if (agenda_day[current_hour].type = any(possible_minors)){
-				if (age > 17 and age <= max_working_age){
-					property <- property - 5;
-				}
-			}
 			if (agenda_day[current_hour].type in [major_agenda_place]) {
 				meet_yesterday <- meet_today;
 				meet_today <- self.major_agenda_place.residents - self;
@@ -245,22 +250,22 @@ species Individual {
 	}
 	
 	// 4. Reflex Add Minor Agenda
-	reflex minor_agenda when: ((current_hour = 0) and age >= min_student_age and age <= max_working_age and live = true) {
+	reflex minor_agenda when: ((current_hour = 2) and quarantine_place = none and age >= min_student_age and age <= max_age and live = true) {
 		
+		bool is_free;
 		float proba_activity;
-		list<int> start_end_hours <- major_agenda_hours[current_day_of_week];
 		loop Time from: 0 to: length(time_of_day)-1 {
-			if (((min(start_end_hours) > max(time_of_day[Time]))) or (max(start_end_hours) < min(time_of_day[Time]))) {
+			if (check_free(time_of_day[Time])) {
 				proba_activity <- proba_activities[Time] * (1-activity_reduction_factor);
 				if (flip(proba_activity)) {
 					do assign_agenda(time_of_day[Time]);
 				}
 			}
-		}		
+		}	
 	}
 	
 	// 5. Reflex Hapus Minor Agenda
-	reflex remove_minor_agenda when: current_hour = 23 and live = true {
+	reflex remove_minor_agenda when: current_hour = 0 and live = true {
 
 		map<int, Building> agenda_day <- agenda_week[current_day_of_week];
 		if (major_agenda_hours[current_day_of_week] != nil) {
@@ -277,43 +282,43 @@ species Individual {
 	}
 	
 	// 6. Reflex economical
-	reflex economical when: age >= 19 and age <= max_working_age and current_day = 7 and current_hour = 18 and live = true {
+	reflex economical when: age >= min_working_age and age <= max_working_age and current_hour = 17 and live = true {
+		
 		if (is_employed){
 			if (not lockdown or not psbb or not new_normal){
-				property <- property + salary; //Kekayaan ditambah dengan gaji
-				self.home.total_property <- self.home.total_property + salary; //Harta 1 keluarga
+				property <- property + (salary/7); //Kekayaan ditambah dengan gaji
+				self.home.total_property <- self.home.total_property + (salary/7); //Harta 1 keluarga
 			} else {
-				property <- property + covid_salary; //Kekayaan ditambah dengan gaji
-				self.home.total_property <- self.home.total_property + covid_salary; //Harta 1 keluarga
+				property <- property + (covid_salary/7); //Kekayaan ditambah dengan gaji
+				self.home.total_property <- self.home.total_property + (covid_salary/7); //Harta 1 keluarga
 			}
-		} else if (major_agenda_type = "school" and age >= 17) {
-			property <- property + salary;
-			self.home.total_property <- self.home.total_property - salary; //Biaya hidup ditanggung keluarga
+		} else if (major_agenda_type = "school" and age >= min_working_age) {
+			if (not lockdown or not psbb or not new_normal){
+				property <- property + (salary/7);
+				self.home.total_property <- self.home.total_property - (salary/7); //Biaya hidup ditanggung keluarga
+			}
 		}
-		
-		float x <- rnd(0.5,2.0); //Biaya hidup orang2 sesuai dengan gaya masing2;
-		if (poor){
-			x <- rnd(0.1,1.0); //Kalau miskin orang2 berhemat
-		}
+	}
 	
-		float out <- salary*x;
-		if (out < 500.0){ //Jika biaya hidup nya dibawah setengah biaya hidup rata2 di Surabaya maka dibuat segitu
-			out <- 500.0;
+	// Reflex Belanja bulanan
+	reflex economic when: age >= min_working_age and age <= max_working_age and current_hour = 18 and live = true { //Biaya hidup orang2 sesuai dengan gaya masing2;
+	
+		float out <- salary*((rnd(0.1,1.25))/7);
+		if (home.family_poor){
+			out <- out*rnd(0.6,0.9); //Jika miskin berhemat
+		}
+		if (out < 70.0){ //Jika biaya hidup nya dibawah setengah biaya hidup rata2 di Surabaya maka dibuat segitu
+			out <- 70.0;
 		}
 		
-		if (major_agenda_type = "school" and age >= 17){
+		if (major_agenda_type = "school"){
 			property <- property - (out); //Pengeluaran hanya kena ke harta pribadi, karena harta rumah dikurangi diawal
-		} else {
+		} else if (major_agenda_type != "school") {
 			property <- property - (out); //Belanja disesuaikan dengan gaji
 			self.home.total_property <- self.home.total_property - (out);
 		}
-		
-		if (property > 550){
-			poor <- false;
-		} else {
-			poor <- true;
-		}
 	}
+	
 	
 	// Reflex Individual Klinis
 	
@@ -507,7 +512,7 @@ species Individual {
 		int num_people <- length(people_inside - self);
 		int num_infected <- length(people_inside where (each.quarantine_place = none and each.covid_stat = infected));
 		int num_quarantined <- length(people_inside where (each.quarantine_place = none and each.covid_stat = infected));
-		float mask_factor <- 1 - mask_effectiveness*mask_usage_proportion;
+		float mask_factor <- 1 - mask_effectiveness*mask_usage_proportion*obedience;
 		float proba <- 0.0;
 		
 		if (covid_stat = none){
@@ -515,11 +520,12 @@ species Individual {
 				float infection_proportion <- (num_infected+proportion_quarantined_transmission*num_quarantined)/num_people;
 				list<int> l <- match_age(susceptibility.keys);
 				proba <- get_proba(susceptibility[l],"gauss");
-				proba <- proba * infection_proportion * mask_factor;
+				proba <- proba * infection_proportion * mask_factor * (1-infection_reduction_factor);
 			}
 		if (flip(proba)) {
 			covid_stat <- exposed;
 			infection_period <- 0;
+			recovered_period <- 0;
 			}
 		}
 	}
@@ -558,49 +564,51 @@ species Individual {
 					must_PCR_test <- true;
 				// Jika gejala mild maka dia harus rapid terlebih dahulu
 				} else if (symptomps in [mild]){
-					must_rapid_test <- true;
+					must_rapid_test <- flip(proba_test*obedience);
 				}
 				
 			// Merubah gejala menjadi keparahan, meningkat	
 			} else if (infection_period = illness_period) {
 				if (symptomps = asymptomic){
-					severity <- one_of(asymptomic,mild,moderate,severe,deadly);
+					severity <- rnd_choice([asymptomic::0.5,mild::0.2,moderate::0.2,severe::0.05,deadly::0.05]);
 				} else if (symptomps = mild) {
-					severity <- one_of(mild,moderate,severe,deadly);
+					severity <- rnd_choice([mild::0.5,moderate::0.3,severe::0.2,deadly::0.1]);
 				} else if (symptomps = moderate) {
-					severity <- one_of(moderate,severe,deadly);
+					severity <- rnd_choice([moderate::0.5,severe::0.3,deadly::0.2]);
 				}
 				
-				bool quarantine <- flip(obedience*quarantine_obedience);
-				switch severity {
-					match asymptomic {
-						if (quarantine){
-							quarantine_place <- house;
+				if stat_covid = confirmed {
+					bool quarantine <- flip(obedience*quarantine_obedience);
+					switch severity {
+						match asymptomic {
+							if (quarantine){
+								quarantine_place <- house;
+							}
 						}
-					}
-					match mild {
-						if (quarantine){
+						match mild {
+							if (quarantine){
+								do enter_building(one_of(buildings_per_activity["hospital","clinic"]));
+								quarantine_place <- hospital;
+							}
+							death_proba <- 1.005*death_proba;
+						}
+						match moderate {
+							if (quarantine){
+								do enter_building(one_of(buildings_per_activity["hospital","clinic"]));
+								quarantine_place <- hospital;
+							}
+							death_proba <- 1.01*death_proba;
+						}
+						match severe {
 							do enter_building(one_of(buildings_per_activity["hospital","clinic"]));
-							quarantine_place <- hospital;
+							quarantine_place <- ICU;
+							death_proba <- 1.04*death_proba;
 						}
-						death_proba <- 1.05*death_proba;
-					}
-					match moderate {
-						if (quarantine){
+						match deadly {
 							do enter_building(one_of(buildings_per_activity["hospital","clinic"]));
-							quarantine_place <- hospital;
+							quarantine_place <- ICU;
+							death_proba <- 1.07*death_proba;
 						}
-						death_proba <- 1.05*death_proba;
-					}
-					match severe {
-						do enter_building(one_of(buildings_per_activity["hospital","clinic"]));
-						quarantine_place <- ICU;
-						death_proba <- 1.5*death_proba;
-					}
-					match deadly {
-						do enter_building(one_of(buildings_per_activity["hospital","clinic"]));
-						quarantine_place <- ICU;
-						death_proba <- 1.7*death_proba;
 					}
 				}
 				
@@ -609,7 +617,7 @@ species Individual {
 					//must_PCR_test <- true;
 					covid_stat <- none;
 					infection_period <- 0;
-					death_proba <- proba_death;
+					death_proba <- 0.0086;
 					severity <- none;
 					symptomps <- none;
 					stat_covid <- recovered;
@@ -636,6 +644,15 @@ species Individual {
 		}
 	}
 	
+	// 7. Reflex Update Recovered
+	reflex update_recovered when: (stat_covid = recovered) and live {
+		if (recovered_period <= 24) {
+			recovered_period <- recovered_period + 1;
+		} else {
+			recovered_period <- 25;
+		}
+	}
+	
 	// FUNGSI-FUNGSI LAIN
 	
 	list<int> match_age (list<list<int>> the_list) {
@@ -646,6 +663,22 @@ species Individual {
 			if (age >= min(l) and age <= max(l)) {
 				return l;
 			}
+		}
+	}
+	
+	bool check_free(list<int> the_time) {
+		/*
+		 * Fungsi untuk menentukan apakah pada pagi, siang, sore, atau malam
+		 * hari terdapat waktu kosong. Hal ini dicek melalui atribut
+		 * major_agenda_hours yang berisi jam masuk kerja/sekolah dan
+		 * jam pulangnya.
+		 */
+		
+		list<int> start_end_hours <- major_agenda_hours[current_day_of_week];
+		if ((min(start_end_hours) > max(the_time)) or (max(start_end_hours) < min(the_time))) {
+			return true;
+		} else {
+			return false;
 		}
 	}
 	
@@ -671,7 +704,7 @@ species Individual {
 		}
 	}
 	
-	/*aspect circle {
+	aspect circle {
 		if (stat_covid = suspect) {
 			draw circle(8) color: #white;
 		} else if (stat_covid = probable) {
@@ -686,13 +719,11 @@ species Individual {
 			draw circle(8) color: #green;
 		} else if (stat_covid = normal) {
 			draw circle(8) color: #yellow;
-		} else if (covid_stat = true) {
-			draw circle(8) color: #purple;
 		}
 		highlight self color: #yellow;
-	} //Untuk menentukan warna dari agent jika berubah status*/
+	} //Untuk menentukan warna dari agent jika berubah status
 	
-	aspect circle {
+	/*aspect circle {
 		if (covid_stat = infected) {
 			draw circle(8) color: #red;
 		} else if (covid_stat = none) {
@@ -701,7 +732,7 @@ species Individual {
 			draw circle(8) color: #blue;
 		}
 		highlight self color: #yellow;
-	}
+	}*/
 		
 }
 
@@ -713,8 +744,8 @@ species Building {
 	bool family_poor;
 	list<Individual> Individuals_inside;
 	list<Individual> residents;
-	reflex economical_home when: (type in possible_livings and current_day = 7){
-		if (total_property > 0){
+	reflex economical_home when: (type in possible_livings and length(residents where each.live) != 0){
+		if (total_property > 2000*(length(residents where (each.age <= max_working_age and each.age >= min_working_age and each.live)))){
 			family_poor <- false;
 		} else {
 			family_poor <- true;
@@ -728,16 +759,15 @@ species Building {
 
 species Boundary {
 	aspect geom {
-		draw shape color: #turquoise;
-		/*if (lockdown){
-			draw shape color: #black;
-		} else if (psbb){
-			draw shape color: #brown;
-		} else if (new_normal){
-			draw shape color: #orange;
+		if lockdown {
+			draw shape color: #brown;	
+		} else if psbb {
+			draw shape color: #darkblue;	
+		} else if new_normal {
+			draw shape color: #darkorange;
 		} else {
 			draw shape color: #turquoise;
-		}*/
+		}
 	}
 }
 

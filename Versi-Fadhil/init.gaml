@@ -100,14 +100,21 @@ global {
 	 * Dalam action ini ditentukan atribut-atribut seperti usia, jenis kelamin, komorbiditas, rumah,
 	 * dan bangunan rekreasi.
 	 */
-	 
+	 	list<Building> minor_buildings_temp <- [];
+		loop times: 3 {
+			string recreation <- one_of(possible_minors);
+			minor_buildings_temp << one_of(buildings_per_activity[recreation]);
+		}
+		string shopping <- one_of (possible_markets);
+		minor_buildings_temp << one_of (buildings_per_activity[shopping]);
+	 	
 	 	int num_family_homes <- (num_family*9) div 10; //Gaada dasar nih cara bagi orangnyaa dirumah atau dihotel
 		ask num_family_homes among homes {
 			
 			if (flip(proba_active_family)) {
 				// Keluarga aktif didefinisikan sebagai keluarga yang setidaknya ada ayah dan ibu.
 				create Individual {
-					age <- rnd(min_working_age,max_working_age);
+					age <- rnd(30,max_working_age);
 					sex <- 1;
 					home <- myself;
 					myself.residents << self;
@@ -118,10 +125,11 @@ global {
 					else {
 						stat_traveler <- none;
 					}
+					recreation_buildings <- minor_buildings_temp;
 				}
 				
 				create Individual {
-					age <- rnd(min_working_age,max_working_age);
+					age <- rnd(25,max_working_age);
 					sex <- 0;
 					home <- myself;
 					myself.residents << self;
@@ -132,6 +140,7 @@ global {
 					else {
 						stat_traveler <- none;
 					}
+					recreation_buildings <- minor_buildings_temp;
 				}
 				
 				int num_children <- rnd(0,max_num_children);
@@ -148,8 +157,10 @@ global {
 						else {
 							stat_traveler <- none;
 						}
+						recreation_buildings <- minor_buildings_temp;
 					}
 				}
+				
 				
 				if (flip(proba_grandfather)) {
 					create Individual {
@@ -164,6 +175,7 @@ global {
 						else {
 							stat_traveler <- none;
 						}
+						recreation_buildings <- minor_buildings_temp;
 					}
 				}
 				
@@ -180,6 +192,7 @@ global {
 						else {
 							stat_traveler <- none;
 						}
+						recreation_buildings <- minor_buildings_temp;
 					}
 				}
 				
@@ -196,6 +209,7 @@ global {
 						else {
 							stat_traveler <- none;
 						}
+						recreation_buildings <- minor_buildings_temp;
 					}
 				}
 				
@@ -203,7 +217,7 @@ global {
 				// Individual yang tinggal sendirian
 				
 				create Individual {
-					age <- rnd(min_working_age,max_age);
+					age <- rnd(max_student_age+1,max_working_age);
 					sex <- rnd(0,1);
 					home <- myself;
 					myself.residents << self;
@@ -214,31 +228,34 @@ global {
 					else {
 						stat_traveler <- none;
 					}
+					recreation_buildings <- minor_buildings_temp;
 				}
 			}			
 		}
 		
 		ask livings {
 			
-			int num_apart_family <- (num_family div 10) div length(buildings_per_activity["apartments","hotel"]);
+			int num_apart_family <- (num_family * 0.1) div length(buildings_per_activity["apartments","hotel"]);
 			loop times: num_apart_family {
 				if (flip(proba_active_family)) {
 					// Keluarga aktif didefinisikan sebagai keluarga yang setidaknya ada ayah dan ibu.
 				
 					create Individual {
-						age <- rnd(min_working_age,max_working_age);
+						age <- rnd(30,max_working_age);
 						sex <- 1;
 						home <- myself;
 						myself.residents << self;
 						stat_traveler <- none;
+						recreation_buildings <- minor_buildings_temp;
 					}
 				
 					create Individual {
-						age <- rnd(min_working_age,max_working_age);
+						age <- rnd(25,max_working_age);
 						sex <- 0;
 						home <- myself;
 						myself.residents << self;
 						stat_traveler <- none;
+						recreation_buildings <- minor_buildings_temp;
 					}
 				
 					int num_children <- rnd(0,max_num_children);
@@ -249,6 +266,7 @@ global {
 							home <- myself;
 							myself.residents << self;
 							stat_traveler <- none;
+							recreation_buildings <- minor_buildings_temp;
 						}
 					}
 				
@@ -259,6 +277,7 @@ global {
 							home <- myself;
 							myself.residents << self;
 							stat_traveler <- none;
+							recreation_buildings <- minor_buildings_temp;
 						}
 					}
 					
@@ -269,6 +288,7 @@ global {
 							home <- myself;
 							myself.residents << self;
 							stat_traveler <- none;
+							recreation_buildings <- minor_buildings_temp;
 						}
 					}
 				
@@ -279,6 +299,7 @@ global {
 							home <- myself;
 							myself.residents << self;
 							stat_traveler <- none;
+							recreation_buildings <- minor_buildings_temp;
 						}
 					}
 				
@@ -286,11 +307,12 @@ global {
 						// Individual yang tinggal sendirian
 				
 						create Individual {
-							age <- rnd(min_working_age,max_age);
+							age <- rnd(max_student_age+1,max_age);
 							sex <- rnd(0,1);
 							home <- myself;
 							myself.residents << self;
 							stat_traveler <- none;
+							recreation_buildings <- minor_buildings_temp;
 						}
 					}			
 				}
@@ -319,17 +341,16 @@ global {
 					major_agenda_place <- schools closest_to self;
 					major_agenda_place.residents << self;
 					major_agenda_type <- "school";
-					if (age >= 17){
-						if (self.home.total_property > 2500){
-							salary <- 1000.0;
+					if (age >= 15){
+						if (self.home.total_property > 30000.0){
+							salary <- rnd(200.0,250.0);
 						} else {
-							salary <- rnd(150.00,500.00);
+							salary <- rnd(125.0,150.0);
 						}
-						property <- salary;
 					}
 				}
 				else {
-					if (sex=0){
+					if (sex=1){
 						is_employed <- flip(proba_employed_male);
 					}
 					else {
@@ -345,17 +366,16 @@ global {
 					major_agenda_place <- schools closest_to self;
 					major_agenda_place.residents << self;
 					major_agenda_type <- "school";
-					if (age >= 17){
-						if (self.home.total_property > 5000){
-							salary <- 1000.0;
+					if (age > 19){
+						if (self.home.total_property > 30000.0){
+							salary <- rnd(500.0,1000.0);
 						} else {
-							salary <- rnd(500.00,750.00);
+							salary <- rnd(200.00,350.00);
 						}
-						property <- salary;
 					}
 				}
 				else {
-					if (sex=0){
+					if (sex=1){
 						is_employed <- flip(proba_employed_male);
 					}
 					else {
@@ -364,7 +384,7 @@ global {
 				}
 			}
 			else if (age>24 and age<=max_working_age){
-				if (sex=0){
+				if (sex=1){
 					is_employed <- flip(proba_employed_male);
 				}
 				else {
@@ -377,65 +397,114 @@ global {
 			list<Building> working_places;
 			// Buat status pekerjaan
 			if (is_employed){
-				major_agenda_type <- rnd_choice(possible_worktype);
-				if (major_agenda_type = "guru"){
-					string school_place <- one_of(possible_schools.values);
-					working_places <- buildings_per_activity[school_place];
-					salary <- get_proba(salary_by_places[school_place],"random");
-				}
-				else if (major_agenda_type = "pns"){
-					string pns_place <- rnd_choice(possible_pns);
-					working_places <- buildings_per_activity[pns_place];
-					salary <- get_proba(salary_by_places[pns_place],"random");
-				}
-				else if (major_agenda_type = "bumn"){
-					string bumn_place <- rnd_choice(possible_bumn);
-					working_places <- buildings_per_activity[bumn_place];
-					salary <- get_proba(salary_by_places[bumn_place],"random");
-				}
-				else if (major_agenda_type = "wiraswasta"){
-					string wiraswasta_place <- rnd_choice(possible_wiraswasta);
-					working_places <- buildings_per_activity[wiraswasta_place];
-					salary <- get_proba(salary_by_places[wiraswasta_place],"random");
-				}
-				else if (major_agenda_type = "swasta_office"){
-					string swasta1_place <- one_of("embassy","commercial","office");
-					working_places <- buildings_per_activity[swasta1_place];
-					salary <- get_proba(salary_by_places[swasta1_place],"random");
-				}
-				else if (major_agenda_type = "swasta_free"){
-					string swasta2_place <- one_of("mall","cafe");
-					working_places <- buildings_per_activity[swasta2_place];
-					salary <- get_proba(salary_by_places[swasta2_place],"random");
-				}
-				else if (major_agenda_type = "nakes"){
-					string nakes_place <- one_of(possible_nakes);
-					working_places <- buildings_per_activity[nakes_place];
-		 			salary <- get_proba(salary_by_places[nakes_place],"random");
-				}
-				else {
-					working_places <- buildings_per_activity[major_agenda_type];
-					if (major_agenda_type = "police"){
-		 				salary <- get_proba(salary_by_places["police"],"random");
-		 			} else if (major_agenda_type = "industrial"){
+				if (age >= 20){
+					major_agenda_type <- rnd_choice(possible_worktype);
+					if (major_agenda_type = "guru"){
+						string school_place <- one_of(possible_schools.values);
+						working_places <- buildings_per_activity[school_place];
+						salary <- get_proba(salary_by_places[school_place],"random");
+					}
+					else if (major_agenda_type = "pns"){
+						string pns_place <- rnd_choice(possible_pns);
+						working_places <- buildings_per_activity[pns_place];
+						salary <- get_proba(salary_by_places[pns_place],"random");
+					}
+					else if (major_agenda_type = "bumn"){
+						string bumn_place <- rnd_choice(possible_bumn);
+						working_places <- buildings_per_activity[bumn_place];
+						salary <- get_proba(salary_by_places[bumn_place],"random");
+					}
+					else if (major_agenda_type = "wiraswasta"){
+						string wiraswasta_place <- rnd_choice(possible_wiraswasta);
+						working_places <- buildings_per_activity[wiraswasta_place];
+						salary <- get_proba(salary_by_places[wiraswasta_place],"random");
+					}
+					else if (major_agenda_type = "swasta_office"){
+						string swasta1_place <- one_of("embassy","commercial","office");
+						working_places <- buildings_per_activity[swasta1_place];
+						salary <- get_proba(salary_by_places[swasta1_place],"random");
+					}
+					else if (major_agenda_type = "swasta_free"){
+						string swasta2_place <- one_of("mall","cafe");
+						working_places <- buildings_per_activity[swasta2_place];
+						salary <- get_proba(salary_by_places[swasta2_place],"random");
+					}
+					else if (major_agenda_type = "nakes"){
+						string nakes_place <- one_of(possible_nakes);
+						working_places <- buildings_per_activity[nakes_place];
+		 				salary <- get_proba(salary_by_places[nakes_place],"random");
+					}
+					else {
+						working_places <- buildings_per_activity[major_agenda_type];
+						if (major_agenda_type = "police"){
+		 					salary <- get_proba(salary_by_places["police"],"random");
+		 				} else if (major_agenda_type = "industrial"){
+		 					salary <- get_proba(salary_by_places["industrial"],"random");
+		 				}
+					}
+					major_agenda_place <- one_of(working_places);
+					major_agenda_place.residents << self;
+				} 
+				else if (age <=20) { //Jika umur dibawah 20 gaji cuma 1-2 juta
+					major_agenda_type <- one_of("wiraswasta","industrial");
+					if (major_agenda_type = "wiraswasta"){
+						string wiraswasta_place <- rnd_choice(possible_wiraswasta);
+						working_places <- buildings_per_activity[wiraswasta_place];
+						salary <- get_proba(salary_by_places[wiraswasta_place],"random");
+					} else if (major_agenda_type = "industrial"){
+						working_places <- buildings_per_activity[major_agenda_type];
 		 				salary <- get_proba(salary_by_places["industrial"],"random");
-		 			}
-				}
-				major_agenda_place <- one_of(working_places);
-				major_agenda_place.residents << self;
+					}
+					major_agenda_place <- one_of(working_places);
+					major_agenda_place.residents << self;
+				}				
 			}
-			else {
+			else if (major_agenda_type != "school") {
 				major_agenda_type <- none;
 				major_agenda_place <- home;
 			}
-			if (age > 17 and age <= max_working_age){
+			if (age >= min_working_age and age <= max_working_age){
 				if (is_employed){
-					property <- 3*salary;
+					property <- length(self.home.residents)*salary;
+					if (property < 5000.0){
+						property <- 5000.0;
+					}
 				} else {
-					property <- rnd(2000.0,3000.0);
+					property <- 0.0;
 				}
-				self.home.total_property <- self.home.total_property + property;
+				home.total_property <- home.total_property + property;
 			}		
+		}
+		individuals_per_profession <- (Individual group_by (each.major_agenda_type));
+	}
+	
+	action check_major {
+		ask homes {
+			if (length(self.residents) > 0){
+			if (length(self.residents where (each.major_agenda_type in [none,"school"]))) >= length(self.residents){
+				ask 1 among (self.residents where (each.major_agenda_type in none and each.age >= min_working_age and each.age <= max_working_age)){
+					major_agenda_type <- one_of("wiraswasta","industrial");
+					is_employed <- true;
+					list<Building> working_places;
+					if (major_agenda_type = "wiraswasta"){
+						string wiraswasta_place <- rnd_choice(possible_wiraswasta);
+						working_places <- buildings_per_activity[wiraswasta_place];
+						salary <- get_proba(salary_by_places[wiraswasta_place],"random");
+					} else if (major_agenda_type = "industrial"){
+						working_places <- buildings_per_activity[major_agenda_type];
+		 				salary <- get_proba(salary_by_places["industrial"],"random");
+					}
+					major_agenda_place <- one_of(working_places);
+					major_agenda_place.residents << self;
+					
+					property <- length(self.home.residents)*salary;
+					if (property < 5000.0){
+						property <- 5000.0;
+					}
+					self.home.total_property <- self.home.total_property + property;
+				}
+			}
+		}
 		}
 		individuals_per_profession <- (Individual group_by (each.major_agenda_type));
 	}

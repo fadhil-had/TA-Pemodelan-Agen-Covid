@@ -16,8 +16,6 @@ import "parameter.gaml"
 
 global {
 	
-	float proba_travel <- proba_travel;
-	float proba_travel_family <- proba_active_family*proba_travel; //Peluang satu keluarga melakukan travelling
 	int num_suspect <- 0;
 	int num_probable <- 0;
 	int num_confirmed <- 0;
@@ -38,10 +36,8 @@ global {
 	int hospitalized_today <- 0;
 	int travel_today <- 0;
 	
-	int positive_yesterday <- 0;
 	int confirmed_yesterday <- 0;
 	int recovered_yesterday <-0;
-	int hospitalized_yesterday <- 0;
 	
 	int recovered_temp <- 0;
 	int death_temp <- 0;
@@ -64,49 +60,43 @@ global {
 		num_confirmed <- population count (each.stat_covid in confirmed and each.live);
 		num_discarded <- population count (each.stat_covid in discarded);
 		num_recovered <- population count (each.stat_covid in recovered and each.live);
-		num_death <- population count (each.stat_covid in death and each.live);
+		num_death <- population count (each.stat_covid in death);
 		num_positive <- population count (each.covid_stat in infected and each.live);
 		num_hospitalized <- population count (each.quarantine_place = hospital and each.live);
 		num_ICU <- population count (each.quarantine_place = ICU and each.live);
 		num_travel <- population count (each.stat_traveler in leave and each.live);
-		num_poor <- population count (each.poor and each.live);
-		num_family_poor <- Building count (each.type in [possible_livings] and each.family_poor);
+		num_poor <- population count (each.poor and each.live and each.major_agenda_type != "school");
+		num_family_poor <- Building count (each.family_poor and each.type in possible_livings);
 		
-		confirmed_today <- population count (each.stat_covid in confirmed and each.quarantine_period < 20 and each.live);
+		confirmed_today <- population count (each.stat_covid in confirmed and each.quarantine_period < 24 and each.live);
 		positive_today <- population count (each.covid_stat in [infected] and (each.infection_period-each.incubation_period+24) < 24 and (each.infection_period-each.incubation_period+24) >= 0 and each.live);
-		recovered_today <- num_recovered - recovered_temp;
+		recovered_today <-  population count (each.stat_covid in recovered and each.recovered_period < 24 and each.live); //Hitungannya salah
 		death_today <- num_death - death_temp;
 		hospitalized_today <- population count ((each.quarantine_place in [hospital,ICU]) and each.quarantine_period < 24 and each.live);
-		travel_today <- num_travel - travel_temp;
+		travel_today <- population count (each.traveler_days = 1 and each.live and each.stat_traveler in leave);
 		
 		// Untuk melihat kualitas layanan sebagai syarat dari lockdown, masih akan dikaji
-		if (positive_today < positive_yesterday and hospitalized_today < hospitalized_yesterday and recovered_today > recovered_yesterday) {
+		if (confirmed_today < confirmed_yesterday or recovered_today > recovered_yesterday) {
 			pos_decrease_counter <- pos_decrease_counter + 1;
 		} else { // Reset counter
 			pos_decrease_counter <- 0;
 		}
 		
-		positive_yesterday <- positive_today;
-		hospitalized_yesterday <- hospitalized_today;
 		confirmed_yesterday <- confirmed_today;
-		recovered_temp <- num_recovered;
-		recovered_yesterday <- recovered_today;
 		death_temp <- num_death;
-		travel_temp <- num_travel;
-		confirmed_temp <- num_confirmed;
+		recovered_yesterday <- recovered_today;
 		
-		positive_yesterday <- positive_today;
 		
-		if (travel_today/num_population > 0.001){
+		if (num_travel > 10){
 			param_mobility <- param_mobility + 1;
 		} else {
 			param_mobility <- 0;
 		}
 	}	
 	
-	reflex total_lockdown when: num_confirmed >= lockdown_threshold and not lockdown and (param_mobility > mobility_lockdown) { //https://www.pikiran-rakyat.com/nasional/pr-01352541/pakar-ui-sebut-ada-3-kriteria-yang-perlu-dilihat-menuju-indonesia-lockdown-dalam-mencegah-corona
+	reflex total_lockdown when: num_confirmed >= lockdown_threshold and num_family_poor < poor_threshold and not new_normal and param_mobility > mobility_lockdown and not lockdown { //https://www.pikiran-rakyat.com/nasional/pr-01352541/pakar-ui-sebut-ada-3-kriteria-yang-perlu-dilihat-menuju-indonesia-lockdown-dalam-mencegah-corona
 		//Syarat lockdown 3, jumlah kasus meningkat pesat, mobilitas tinggi dan dana siap
-		time_of_day <- [];
+	
 		loop occupation over: individuals_per_profession.keys {
 			if (occupation = "nakes") {
 				// Menyuruh Individual yang bekerja di nakes
@@ -119,21 +109,30 @@ global {
 						agenda_day[end_hour] <- major_agenda_place;
 					}
 				}
-			} else {
+			} else if (occupation != none){
 				// Menyuruh Individual yang bekerja di selain nakes full wfh
 				ask individuals_per_profession[occupation] {
 					loop agenda_day over:agenda_week {
 						int start_hour <- min(agenda_day.keys);
 						agenda_day[start_hour] <- home;
 						if (occupation = "wiraswasta"){
-							covid_salary <- rnd(0.0,salary*0.5);
-						} else if (occupation in ["swasta_free","swasta_office","industrial","bumn"]){
-							covid_salary <- salary*0.5;
-						} else if (occupation in ["pns"]){
-							covid_salary <- salary*0.8;
+							covid_salary <- rnd(salary*0.5,salary*0.8);
+						} else if (occupation in ["swasta_free","industrial","bumn"]){
+							covid_salary <- rnd(salary*0.75,salary*0.9);
+						} else if (occupation in ["pns","swasta_office"]){
+							covid_salary <- rnd(salary*0.8,salary*0.9);
+						} else {
+							covid_salary <- rnd(salary*0.8,salary*0.95);
 						}
 					}
 				}
+			}
+		}
+		loop places over: buildings_per_activity.keys{
+			if (places = one_of(possible_minors)){
+				ask buildings_per_activity[places]{
+					capacity <- capacity div 2;
+				}	
 			}
 		}
 		lockdown <- true;
@@ -141,9 +140,10 @@ global {
 		new_normal <- false;
 		activity_reduction_factor <- activity_reduction_lockdown;
 		mask_usage_proportion <- 1.0;
+		infection_reduction_factor <- infection_reduction_lockdown;
 	}
 	
-	reflex psbb when: num_confirmed >= psbb_threshold and not lockdown and not psbb { //https://www.pikiran-rakyat.com/nasional/pr-01352541/pakar-ui-sebut-ada-3-kriteria-yang-perlu-dilihat-menuju-indonesia-lockdown-dalam-mencegah-corona
+	reflex psbb when: num_confirmed >= psbb_threshold and num_family_poor < poor_threshold and not lockdown and not psbb { //https://www.pikiran-rakyat.com/nasional/pr-01352541/pakar-ui-sebut-ada-3-kriteria-yang-perlu-dilihat-menuju-indonesia-lockdown-dalam-mencegah-corona
 		/* 
 		 * Kalau sedang lockdown, gabisa langsung PSBB, tp harus ke new normal dulu
 		 * Jam malam diberlakukan sehingga diatas jam 8 gaboleh keluar sama sekali
@@ -167,7 +167,7 @@ global {
 					loop agenda_day over:agenda_week {
 						int start_hour <- min(agenda_day.keys);
 						agenda_day[start_hour] <- major_agenda_place;
-						covid_salary <- rnd(salary*0.25,salary*0.75); 
+						covid_salary <- rnd(salary*0.7,salary*0.9); 
 					}
 				}
 			} else if (occupation in ["indusrial","pns","police"]){
@@ -181,16 +181,20 @@ global {
 					agenda_week[wfh_day_2][start_hour] <- home;
 					start_hour <- min(major_agenda_hours[wfh_day_3]);
 					agenda_week[wfh_day_3][start_hour] <- home;
-					covid_salary <- rnd(salary*0.5,salary*0.8); 
+					if occupation in ["indusrial"]{
+						covid_salary <- rnd(salary*0.85,salary*1.0);
+					}
 				}
 			}
-			else {
+			else if (occupation != none){
 				// Menyuruh Individual yang bekerja di selain nakes full wfh
 				ask individuals_per_profession[occupation] {
 					loop agenda_day over:agenda_week {
 						int start_hour <- min(agenda_day.keys);
 						agenda_day[start_hour] <- home;
-						covid_salary <- rnd(salary*0.5,salary*0.8); 
+						if occupation != "guru" {
+							covid_salary <- rnd(salary*0.9,salary*1.0);
+						}
 					}
 				}
 			}
@@ -200,16 +204,17 @@ global {
 					capacity <- capacity div 2;
 				}	
 			}
-		}
+			}
 		}
 		lockdown <- false;
 		psbb <- true;
 		new_normal <- false;
 		activity_reduction_factor <- activity_reduction_psbb;
 		mask_usage_proportion <- 0.75;
+		infection_reduction_factor <- infection_reduction_psbb;
 	}
 	
-	reflex new_normal when: pos_decrease_counter = new_normal_threshold and num_confirmed < psbb_threshold and (lockdown or psbb) and not new_normal {
+	reflex new_normal when: (pos_decrease_counter >= new_normal_threshold or num_confirmed <= 0.5*psbb_threshold or num_family_poor >= poor_threshold) and (lockdown or psbb) and not new_normal {
 		
 		/*
 		 * PSBB sama lockdown diangkat jika point mencapai threshold
@@ -228,7 +233,15 @@ global {
 						agenda_day[end_hour] <- home;
 					}
 				}
-			} else if (occupation != ["none","wiraswasta","industrial","swasta_free","police"]){
+			} else if (occupation in ["wiraswasta","industrial","swasta_free","police"]){
+				ask individuals_per_profession[occupation] {
+					loop agenda_day over: agenda_week {
+						int start_hour <- min(agenda_day.keys);
+						agenda_day[start_hour] <- major_agenda_place;
+						covid_salary <- salary;
+					}
+				}
+			} else if (occupation != none) {
 				ask individuals_per_profession[occupation] {
 					int wfh_day_1 <- one_of (major_agenda_hours.keys);
 					int wfh_day_2 <- one_of (major_agenda_hours.keys - wfh_day_1);
@@ -239,22 +252,13 @@ global {
 					agenda_week[wfh_day_2][start_hour] <- home;
 					start_hour <- min(major_agenda_hours[wfh_day_3]);
 					agenda_week[wfh_day_3][start_hour] <- home;
-					covid_salary <- rnd(salary*0.75,salary);
-				}
-			} else {
-				ask individuals_per_profession[occupation] {
-					loop agenda_day over: agenda_week {
-						int start_hour <- min(agenda_day.keys);
-						agenda_day[start_hour] <- major_agenda_place;
-						covid_salary <- salary; 
-					}
 				}
 			}
 		}
 		loop places over: buildings_per_activity.keys{
 			if (places = one_of(possible_minors)){
 				ask buildings_per_activity[places]{
-					capacity <- capacity div 2;
+					capacity <- capacity*2;
 				}	
 			}
 		}
@@ -264,6 +268,7 @@ global {
 		new_normal <- true;
 		activity_reduction_factor <- activity_reduction_newnormal;
 		mask_usage_proportion <- 0.5;
+		infection_reduction_factor <- infection_reduction_newnormal;
 	}
 	
 	reflex full_normal when: confirmed_today = 0 and pos_decrease_counter = normal_threshold and (lockdown or psbb or new_normal) {
@@ -298,5 +303,6 @@ global {
 		new_normal <- false;
 		activity_reduction_factor <- 0.0;
 		mask_usage_proportion <- 0.0;
+		infection_reduction_factor <- 0.2;
 	}
 }
