@@ -13,24 +13,28 @@ import "agen_Azka.gaml"
 /* Insert your model definition here */
 
 global{
-	//General Parameter of Simulation
-	int num_population; //Initial population, input from user
+	//Input Parameter
+	int num_population; //Initial population
 	int num_family; //Initial family, input from user
-	int num_building; //Initial building, input from user ???
-	int num_init_confirmed; //Initial confirmed status, input from user
+	//int num_building; //Initial building
+	int num_init_infected; //Initial confirmed status, input from user
+	int patient_cap;
+	int icu_cap;
+	int ven_cap;
+	float obedience;
+	float test_accuracy;
+	float hospital_threshold;
 	
 	//float test_accuracy;
 	float contact_tracing_effectiveness; //Input from user
-	float sensitivity_pcr <- 0.91; //Data from journal
-	float specificity_pcr <- 0.95; //Data from journal
-	float sensitivity_rapid <- 1.0; //Search data from journal
-	float specificity_rapid <- 1.0; //Search data from journal
-	float quarantine_obedience; //Initial obedience from data in journal
-	float mask_obedience; //Initial obedience from data in journal
-	float test_rate <- 0.025; //sumber?
+	float sensitivity_pcr; //Input
+	float specificity_pcr; //Input
+	float sensitivity_rapid; //Input
+	float specificity_rapid; //Input
+	float quarantine_obedience <- 0.73; //Initial obedience from data in journal
+	float mask_obedience <- 0.81; //Initial obedience from data in journal
 	float mask_effectiveness <- 0.77; //sumber?
 	int simulation_days; //Jumlah hari simulasi
-	int building_capacity_factor <- 1;
 	
 	//Demographical Parameters
 	int min_age <- 1;
@@ -46,7 +50,7 @@ global{
 	float proba_employed_male <- 0.8251; //Jumlah laki2 bekerja, Sumber: BPS Nasional
 	float proba_employed_female <- 0.5089; //Jumlah perempuan bekerja
 	float proba_works_at_home <- 0.03; //Jumlah WFH
-	int max_num_children <- 2; //Belum
+	int max_num_children <- 3; //Belum
 	float proba_others <- 0.25; //Proba banyaknya orang lain di dalam satu rumah
 	
 	//TIME DIVISION
@@ -56,15 +60,6 @@ global{
 	list<int> night <- [19,20,21,22];
 	list<int> midnight <- [23,0,1,2,3,4,5,6];
 	list<list<int>> time_of_day <- [morning, daytime, evening, night, midnight];
-	
-	
-	//EPIDEMIOLOGICAL PARAMETERS
-	list<string> status_covid <- [ //Status agen manusia
-		"suspect", "probable", "confirmed", "discarded", "kontak erat", "death", "recovered", "normal"
-	];
-	list<string> severity <- [ //Keparahan penyakit
-		"asymptomic", "mild", "moderate", "severe", "critical"
-	];
 	
 	
 	map<list<int>,list<float>> clinical_fraction <- [ //Belum

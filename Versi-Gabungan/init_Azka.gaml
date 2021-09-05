@@ -10,6 +10,7 @@ model tugasAkhirAzka
 
 import "agen_Azka.gaml"
 import "parameter_Azka.gaml"
+import "reflex_global_Azka.gaml"
 
 /* Insert your model definition here */
 
@@ -66,8 +67,10 @@ global {
 	map<string, float> possible_swasta;
 	map<string, float> possible_bumn;
 	map<string, float> possible_wiraswasta;
-	list<string> possible_nakes;
+	map<string, float> possible_nakes;
 	int total_hospital;
+	list<Individual> population;
+	list<Building> hospitals;
 	
 	//Action for Initial from GIS
 	action init_building {
@@ -80,9 +83,9 @@ global {
 	action init_jobtype {
 		// Action untuk memasukkan tiap type building ke kategori masing-masing
 		buildings_per_activity <- Building group_by (each.type);
-		possible_livings <- ["house","hotel","apartments", "boarder_house"];
+		possible_livings <- ["house","hotel","apartments"];
 		livings <- Building where (each.type in ["apartments","hotel"]);
-		homes <- Building where (each.type in ["house","border_house"]);
+		homes <- Building where (each.type in ["house"]);
 		possible_schools <-  [[4,5]::"kindergarten", [6,11]::"elementary_school", [12,14]::"junior_high_school", [15,17]::"senior_high_school", [18,24]::"university"];
 		possible_markets <- ["marketplace","mall","store"];
 		possible_minors <- ["cafe","temple","public","mosque","church","marketplace","mall","store"];
@@ -91,8 +94,8 @@ global {
 		possible_bumn <- ["post_office"::0.1, "bank"::0.6, "community_group_office"::0.3];
 		possible_wiraswasta <- ["store"::0.4, "marketplace"::0.6];
 		possible_swasta <- ["embassy"::0.001, "commercial"::0.14, "office"::0.7, "mall"::0.119, "cafe"::0.04];
-		possible_nakes <- ["clinic", "hospital"];	
-		total_hospital <- Building count (each.type in "hosital");
+		possible_nakes <- ["clinic"::0.1, "hospital"::0.9];	
+		hospitals <- Building where(each.type="hospital");
 	}
 	
 	action population_generation {
@@ -104,7 +107,7 @@ global {
 	 * dan bangunan rekreasi.
 	 */
 	 
-	 	int num_family_homes <- (num_family*9) div 10;
+	 	int num_family_homes <- num_family;
 		ask num_family_homes among homes {
 			
 			if (flip(proba_active_family)) {
@@ -115,12 +118,6 @@ global {
 					sex <- 1;
 					home <- myself;
 					myself.residents << self;
-					if (homes = buildings_per_activity["border_house"]){
-						stat_traveler <- "commuter";
-					}
-					else {
-						stat_traveler <- "none";
-					}
 				}
 				
 				create Individual {
@@ -128,12 +125,6 @@ global {
 					sex <- 0;
 					home <- myself;
 					myself.residents << self;
-					if (homes = buildings_per_activity["border_house"]){
-						stat_traveler <- "commuter";
-					}
-					else {
-						stat_traveler <- "none";
-					}
 				}
 				
 				int num_children <- rnd(0,max_num_children);
@@ -143,31 +134,19 @@ global {
 						sex <- rnd(0,1);
 						home <- myself;
 						myself.residents << self;
-						if (homes = buildings_per_activity["border_house"]){
-							stat_traveler <- "commuter";
-						}
-						else {
-							stat_traveler <- "none";
-						}
 					}
 				}
 				
-				
-				if(flip(proba_others)) {
-					create Individual {
-						age <- rnd(min_working_age,max_working_age);
-						sex <- rnd(0,1);
-						home <- myself;
-						myself.residents << self;
-						if (homes = buildings_per_activity["border_house"]){
-							stat_traveler <- "commuter";
-						}
-						else {
-							stat_traveler <- "none";
+				loop times: rnd(1,3) { 
+					if(flip(proba_others)) {//ini coba di loop buat naikin jumlah penduduk
+						create Individual {
+							age <- rnd(min_working_age,max_working_age);
+							sex <- rnd(0,1);
+							home <- myself;
+							myself.residents << self;
 						}
 					}
 				}
-				
 			} else {
 				// Individual yang tinggal sendirian
 				
@@ -176,16 +155,10 @@ global {
 					sex <- rnd(0,1);
 					home <- myself;
 					myself.residents << self;
-					if (homes = buildings_per_activity["border_house"]){
-						stat_traveler <- "commuter";
-					}
-					else {
-						stat_traveler <- "none";
-					}
 				}
 			}			
 		}
-		
+		/* 
 		ask livings {
 			
 			int num_apart_family <- (num_family div 10) div 12;
@@ -238,8 +211,9 @@ global {
 					}			
 				}
 			}
-		
+	*/	
 			num_population <- length (Individual);
+			population <- Individual where (each.stat_traveler = "none" or each.stat_traveler = "leave");
 		}
 	
 	action major_agenda{
@@ -325,7 +299,7 @@ global {
 					working_places <- buildings_per_activity[swasta_place];
 				}
 				else if (major_agenda_type = "nakes"){
-					string nakes_place <- one_of(possible_nakes);
+					string nakes_place <- rnd_choice(possible_nakes);
 					working_places <- buildings_per_activity[nakes_place];
 				}
 				else {
@@ -339,6 +313,7 @@ global {
 				major_agenda_place <- home;
 			}		
 		}
+	total_hcw <- population count (each.major_agenda_type in "nakes");
 	}
 	
 	
@@ -423,6 +398,29 @@ global {
 		}
 	}
 	
-	
+	action init_hospital{
+		total_hospital <- Building count (each.type in "hospital");
+		int temp_patient <- int(patient_cap div total_hospital);
+		int temp_icu <- int(icu_cap div total_hospital);
+		int temp_ven <- int(ven_cap div total_hospital);
+		
+		ask hospitals{
+			patient_capacity <- temp_patient;
+			icu_capacity <- temp_icu;
+			icu_venti_capacity <- temp_ven; 
+		}
+		
+		if ((patient_cap mod total_hospital)!=0 or (icu_cap mod total_hospital)!=0 or (ven_cap mod total_hospital)!=0){
+			int temp_patient1 <- patient_cap mod total_hospital;
+			int temp_icu1 <- icu_cap mod total_hospital;
+			int temp_ven1 <- ven_cap mod total_hospital;
+			
+			ask one_of(hospitals){
+				patient_capacity <- temp_patient + temp_patient1;
+				icu_capacity <- temp_icu + temp_icu1;
+				icu_venti_capacity <- temp_ven + temp_ven1; 
+			}
+		}
+	}
 	
 }
